@@ -278,7 +278,7 @@ void Att_Control(void *argument)
   {
     vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //固定1KHz
 
-    if(xQueuePeek(xIMU_DataQ,&IMU,0) == pdTRUE)
+    if(xQueueReceive(xIMU_DataQ,&IMU,0) == pdTRUE)
     {
       //如果有数据
 
@@ -299,9 +299,8 @@ void Att_Control(void *argument)
       /*PID控制 BEGIN*/
 
 			/**PID控制 END**/
-
-			HAL_IWDG_Refresh(&hiwdg1);
     }
+    HAL_IWDG_Refresh(&hiwdg1);    //无条件喂狗
   }
   /* USER CODE END Att_Control */
 }

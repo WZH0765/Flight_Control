@@ -10,39 +10,39 @@ uint8_t Rx_Buffer[36] = {0};
 
 rc_data_t RC_DATA;
 
-float float_Map(float input_value, float input_min, float input_max, float Outputput_min, float Outputput_max)
+float float_Map(float input_value, float input_min, float input_max, float Output_min, float Output_max)
 {
-	float Outputput_value;
+	float Output_value;
 	if (input_value < input_min)
 	{
-		Outputput_value = Outputput_min;
+		Output_value = Output_min;
 	}
 	else if (input_value > input_max)
 	{
-		Outputput_value = Outputput_max;
+		Output_value = Output_max;
 	}
 	else
 	{
-		Outputput_value = Outputput_min + (input_value - input_min) * (Outputput_max - Outputput_min) / (input_max - input_min);
+		Output_value = Output_min + (input_value - input_min) * (Output_max - Output_min) / (input_max - input_min);
 	}
-	return Outputput_value;
+	return Output_value;
 }
 
-float float_Map_with_median(float input_value, float input_min, float input_max, float median, float Outputput_min, float Outputput_max)
+float float_Map_with_median(float input_value, float input_min, float input_max, float median, float Output_min, float Output_max)
 {
-    float Outputput_median = (Outputput_max - Outputput_min) / 2 + Outputput_min;
-    if (input_min >= input_max || Outputput_min >= Outputput_max || median <= input_min || median >= input_max)
+    float Output_median = (Output_max - Output_min) / 2 + Output_min;
+    if (input_min >= input_max || Output_min >= Output_max || median <= input_min || median >= input_max)
     {
-        return Outputput_min;
+        return Output_min;
     }
 	
     if (input_value < median)
     {
-        return float_Map(input_value, input_min, median, Outputput_min, Outputput_median);
+        return float_Map(input_value, input_min, median, Output_min, Output_median);
     }
     else
     {
-        return float_Map(input_value, median, input_max, Outputput_median, Outputput_max);
+        return float_Map(input_value, median, input_max, Output_median, Output_max);
     }
 }
 
