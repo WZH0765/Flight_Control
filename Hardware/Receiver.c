@@ -155,7 +155,5 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
         xSemaphoreGiveFromISR(xRC_DataReady,&xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 
-        //重启 DMA 接收
-        Receiver_Init();
 	}
 }

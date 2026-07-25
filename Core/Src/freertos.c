@@ -334,6 +334,9 @@ void RC_Parse(void *argument)
 
       //发送到队列
       xQueueOverwrite(xRC_DataQ,&RC_DATA);
+
+      //重启 DMA 接收
+      Receiver_Init();
     }
   }
   /* USER CODE END RC_Parse */
