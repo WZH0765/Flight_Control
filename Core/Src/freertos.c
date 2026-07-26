@@ -46,9 +46,14 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define RAD        0.0174533f
-#define ACC_SCALE  9.80f/8192.0f
-#define GYRO_SCALE 0.0174533f/32.8f
+#define ACC_SCALE   9.80f/8192.0f
+#define GYRO_SCALE  0.0174533f/32.8f
+
+#define RAD         0.0174533f
+#define YAW_SCALE   180.0f/100.0f   /* 最大偏航角 180° */
+#define ROLL_SCALE  45.00f/100.0f   /* 最大倾斜角 45° */
+#define PITCH_SCALE 45.00f/100.0f   /* 最大倾斜角 45° */
+#define ATT_CTRL_DT 0.001f          /* 姿态控制周期 (1kHz) */
 
 /* USER CODE END PD */
 
@@ -296,41 +301,34 @@ void Att_Control(void *argument)
       /**获取到RC数据**/
       if(xQueuePeek(xRC_DataQ,&RC,0) == pdTRUE)
       {
-        float Roll_Target_deg  = RC.Right_X * 45.0f / 100.0f;
-        float Pitch_Target_deg = RC.Right_Y * 45.0f / 100.0f;
-        float Yaw_Rate_deg     = RC.Left_X  * 180.0f / 100.0f;
-
-        float Roll_Target_rad  = Roll_Target_deg  * RAD;
-        float Pitch_Target_rad = Pitch_Target_deg * RAD;
-        float Yaw_Rate_rad     = Yaw_Rate_deg     * RAD;
+        float Yaw_Target   = RC.Left_X *YAW_SCALE  *RAD;
+        float Roll_Target  = RC.Right_X*ROLL_SCALE *RAD;
+        float Pitch_Target = RC.Right_Y*PITCH_SCALE*RAD;
 
         /*** 外环:角度PID → 输出:角速度设定值 ***/
-        PID_Angle_Roll.Target  = Roll_Target_rad;
-        PID_Angle_Roll.Actual  = Att.Roll;
-        float Rate_Roll_SP     = PID_Calculate(&PID_Angle_Roll,0.001f);
+        PID_Angle_Roll.Target   = Roll_Target;
+        PID_Angle_Roll.Actual   = Att.Roll;
+        float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
 
-        PID_Angle_Pitch.Target = Pitch_Target_rad;
-        PID_Angle_Pitch.Actual = Att.Pitch;
-        float Rate_Pitch_SP    = PID_Calculate(&PID_Angle_Pitch,0.001f);
+        PID_Angle_Pitch.Target  = Pitch_Target;
+        PID_Angle_Pitch.Actual  = Att.Pitch;
+        float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-        /*** 内环:角速度PID → 输出:混控指令 ***/
-        PID_Rate_Roll.Target   = Rate_Roll_SP;
-        PID_Rate_Roll.Actual   = Gx;          //陀螺仪X=滚转角速度(rad/s)
-        float Out_Roll         = PID_Calculate(&PID_Rate_Roll,0.001f);
+        /*** 内环:角速度PID →  输出:混控指令 ***/
+        PID_Rate_Roll.Target    = Rate_Roll_Target;
+        PID_Rate_Roll.Actual    = Gx;          //陀螺仪X=滚转角速度(rad/s)
+        float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
-        PID_Rate_Pitch.Target  = Rate_Pitch_SP;
-        PID_Rate_Pitch.Actual  = Gy;          //陀螺仪Y=俯仰角速度(rad/s)
-        float Out_Pitch        = PID_Calculate(&PID_Rate_Pitch,0.001f);
+        PID_Rate_Pitch.Target   = Rate_Pitch_Target;
+        PID_Rate_Pitch.Actual   = Gy;          //陀螺仪Y=俯仰角速度(rad/s)
+        float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
-        PID_Rate_Yaw.Target    = Yaw_Rate_rad;
-        PID_Rate_Yaw.Actual    = Gz;          //陀螺仪Z=偏航角速度(rad/s)
-        float Out_Yaw          = PID_Calculate(&PID_Rate_Yaw,0.001f);
+        PID_Rate_Yaw.Target     = Yaw_Target;
+        PID_Rate_Yaw.Actual     = Gz;          //陀螺仪Z=偏航角速度(rad/s)
+        float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-        //油门(Left_Y:0~100归一化到0~1)
-        float Throttle         = RC.Left_Y / 100.0f;
-
-        //TODO: 电机混控 - 将Out_Roll/Out_Pitch/Out_Yaw/Throttle映射到各电机PWM
-        //例如: M1 = Throttle + Out_Roll + Out_Pitch + Out_Yaw  (需根据机型调整符号)
+        //油门
+        float Throttle          = RC.Left_Y/100.0f;
       }
 			/**PID控制 END**/
     }
