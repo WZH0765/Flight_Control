@@ -34,6 +34,7 @@
 #include "Filter.h"
 #include "iwdg.h"
 #include "IMU.h"
+#include "PID.h"
 
 /* USER CODE END Includes */
 
@@ -45,6 +46,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
+#define RAD        0.0174533f
 #define ACC_SCALE  9.80f/8192.0f
 #define GYRO_SCALE 0.0174533f/32.8f
 
@@ -263,9 +265,12 @@ void Att_Control(void *argument)
 
   (void)argument;
 
-  imu_data_t IMU = {0};
+  rc_data_t  RC  = {0};     //RC 数据
+  imu_data_t IMU = {0};     //IMU数据
+
   TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时刻
 
+  PID_Init();
   Filter_Init(0.5f,0.01f);
 
   /* Infinite loop */
@@ -273,11 +278,10 @@ void Att_Control(void *argument)
   {
     vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //固定1KHz
 
+    /**获取到IMU数据**/
     if(xQueueReceive(xIMU_DataQ,&IMU,0) == pdTRUE)
     {
-      //如果有数据
-
-			/*数据缩放 BEGIN*/
+			//数据缩放
 			float Ax = IMU.ACC_X*ACC_SCALE;
       float Ay = IMU.ACC_Y*ACC_SCALE;
       float Az = IMU.ACC_Z*ACC_SCALE;
@@ -285,14 +289,49 @@ void Att_Control(void *argument)
       float Gx = IMU.GYRO_X*GYRO_SCALE;
       float Gy = IMU.GYRO_Y*GYRO_SCALE;
       float Gz = IMU.GYRO_Z*GYRO_SCALE;
-			/**数据缩放 END**/
- 
-			/*姿态解算 BEGIN*/
+
+			//姿态解算
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,0.001f);
-			/**姿态解算 END**/
 
-      /*PID控制 BEGIN*/
+      /**获取到RC数据**/
+      if(xQueuePeek(xRC_DataQ,&RC,0) == pdTRUE)
+      {
+        float Roll_Target_deg  = RC.Right_X * 45.0f / 100.0f;
+        float Pitch_Target_deg = RC.Right_Y * 45.0f / 100.0f;
+        float Yaw_Rate_deg     = RC.Left_X  * 180.0f / 100.0f;
 
+        float Roll_Target_rad  = Roll_Target_deg  * RAD;
+        float Pitch_Target_rad = Pitch_Target_deg * RAD;
+        float Yaw_Rate_rad     = Yaw_Rate_deg     * RAD;
+
+        /*** 外环:角度PID → 输出:角速度设定值 ***/
+        PID_Angle_Roll.Target  = Roll_Target_rad;
+        PID_Angle_Roll.Actual  = Att.Roll;
+        float Rate_Roll_SP     = PID_Calculate(&PID_Angle_Roll,0.001f);
+
+        PID_Angle_Pitch.Target = Pitch_Target_rad;
+        PID_Angle_Pitch.Actual = Att.Pitch;
+        float Rate_Pitch_SP    = PID_Calculate(&PID_Angle_Pitch,0.001f);
+
+        /*** 内环:角速度PID → 输出:混控指令 ***/
+        PID_Rate_Roll.Target   = Rate_Roll_SP;
+        PID_Rate_Roll.Actual   = Gx;          //陀螺仪X=滚转角速度(rad/s)
+        float Out_Roll         = PID_Calculate(&PID_Rate_Roll,0.001f);
+
+        PID_Rate_Pitch.Target  = Rate_Pitch_SP;
+        PID_Rate_Pitch.Actual  = Gy;          //陀螺仪Y=俯仰角速度(rad/s)
+        float Out_Pitch        = PID_Calculate(&PID_Rate_Pitch,0.001f);
+
+        PID_Rate_Yaw.Target    = Yaw_Rate_rad;
+        PID_Rate_Yaw.Actual    = Gz;          //陀螺仪Z=偏航角速度(rad/s)
+        float Out_Yaw          = PID_Calculate(&PID_Rate_Yaw,0.001f);
+
+        //油门(Left_Y:0~100归一化到0~1)
+        float Throttle         = RC.Left_Y / 100.0f;
+
+        //TODO: 电机混控 - 将Out_Roll/Out_Pitch/Out_Yaw/Throttle映射到各电机PWM
+        //例如: M1 = Throttle + Out_Roll + Out_Pitch + Out_Yaw  (需根据机型调整符号)
+      }
 			/**PID控制 END**/
     }
     HAL_IWDG_Refresh(&hiwdg1);    //无条件喂狗

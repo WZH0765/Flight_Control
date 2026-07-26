@@ -16,6 +16,8 @@ typedef struct
 
 } Attitude_t;
 
+extern Attitude_t Att;
+
 void Filter_Init(float P,float I);
 void Filter_Update(float Ax,float Ay,float Az,float Gx,float Gy,float Gz,float dt);
 
