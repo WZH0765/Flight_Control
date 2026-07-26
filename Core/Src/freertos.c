@@ -50,21 +50,21 @@
 #define GYRO_SCALE  0.0174533f/32.8f
 
 #define RAD         0.0174533f
-#define YAW_SCALE   180.0f/100.0f   /* æœ€å¤§åèˆªè§’ 180Â° */
-#define ROLL_SCALE  45.00f/100.0f   /* æœ€å¤§å€¾æ–œè§’ 45Â° */
-#define PITCH_SCALE 45.00f/100.0f   /* æœ€å¤§å€¾æ–œè§’ 45Â° */
-#define ATT_CTRL_DT 0.001f          /* å§¿æ€æ§åˆ¶å‘¨æœŸ (1kHz) */
+#define YAW_SCALE   180.0f/100.0f   /* ×î´óÆ«º½½Ç 180¡ã */
+#define ROLL_SCALE  45.00f/100.0f   /* ×î´óÇãĞ±½Ç 45¡ã */
+#define PITCH_SCALE 45.00f/100.0f   /* ×î´óÇãĞ±½Ç 45¡ã */
+#define ATT_CTRL_DT 0.001f          /* ×ËÌ¬¿ØÖÆÖÜÆÚ (1kHz) */
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-SemaphoreHandle_t xIMU_DataReady;     //IMUæ•°æ®å°±ç»ª
-SemaphoreHandle_t xRC_DataReady;      //RCæ•°æ®å°±ç»ª
+SemaphoreHandle_t xIMU_DataReady;     //IMUÊı¾İ¾ÍĞ÷
+SemaphoreHandle_t xRC_DataReady;      //RCÊı¾İ¾ÍĞ÷
 
-QueueHandle_t     xIMU_DataQ;         //IMUæ•°æ®é˜Ÿåˆ—
-QueueHandle_t     xRC_DataQ;          //RCæ•°æ®é˜Ÿåˆ—
+QueueHandle_t     xIMU_DataQ;         //IMUÊı¾İ¶ÓÁĞ
+QueueHandle_t     xRC_DataQ;          //RCÊı¾İ¶ÓÁĞ
 
 /* USER CODE END PM */
 
@@ -154,7 +154,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
   xRC_DataReady  = xSemaphoreCreateBinary();
-  xIMU_DataReady = xSemaphoreCreateBinary();    //åˆ›å»ºä¿¡å·é‡
+  xIMU_DataReady = xSemaphoreCreateBinary();    //´´½¨ĞÅºÅ??
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -221,9 +221,9 @@ void IMU_Read(void *argument)
     int32_t Acc_Sum[3]  = {0};
     int32_t Gyro_Sum[3] = {0};
 
-    xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //ç­‰å¾…æ•°æ®ä¿¡å·
+    xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //µÈ´ıÊı¾İĞÅºÅ
 
-    inv_imu_get_frame_count(&IMU,&FIFO_CNT);    //å¸§æ•°
+    inv_imu_get_frame_count(&IMU,&FIFO_CNT);    //Ö¡Êı
 
     if(FIFO_CNT < 3 || FIFO_CNT > 10)
     {
@@ -270,10 +270,10 @@ void Att_Control(void *argument)
 
   (void)argument;
 
-  rc_data_t  RC  = {0};     //RC æ•°æ®
-  imu_data_t IMU = {0};     //IMUæ•°æ®
+  rc_data_t  RC  = {0};     //RC Êı¾İ
+  imu_data_t IMU = {0};     //IMUÊı¾İ
 
-  TickType_t xLastWakeTime = xTaskGetTickCount();     //è·å–ä¸Šä¸€æ¬¡ä»»åŠ¡å”¤é†’æ—¶åˆ»
+  TickType_t xLastWakeTime = xTaskGetTickCount();     //»ñÈ¡ÉÏÒ»´ÎÈÎÎñ»½ĞÑÊ±¿Ì
 
   PID_Init();
   Filter_Init(0.5f,0.01f);
@@ -281,12 +281,12 @@ void Att_Control(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //å›ºå®š1KHz
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //¹Ì¶¨1KHz
 
-    /**è·å–åˆ°IMUæ•°æ®**/
+    /**»ñÈ¡µ½IMUÊı¾İ**/
     if(xQueueReceive(xIMU_DataQ,&IMU,0) == pdTRUE)
     {
-			//æ•°æ®ç¼©æ”¾
+			//Êı¾İËõ·Å
 			float Ax = IMU.ACC_X*ACC_SCALE;
       float Ay = IMU.ACC_Y*ACC_SCALE;
       float Az = IMU.ACC_Z*ACC_SCALE;
@@ -295,17 +295,17 @@ void Att_Control(void *argument)
       float Gy = IMU.GYRO_Y*GYRO_SCALE;
       float Gz = IMU.GYRO_Z*GYRO_SCALE;
 
-			//å§¿æ€è§£ç®—
+			//×ËÌ¬½âËã
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,0.001f);
 
-      /**è·å–åˆ°RCæ•°æ®**/
+      /**»ñÈ¡µ½RCÊı¾İ**/
       if(xQueuePeek(xRC_DataQ,&RC,0) == pdTRUE)
       {
         float Yaw_Target   = RC.Left_X *YAW_SCALE  *RAD;
         float Roll_Target  = RC.Right_X*ROLL_SCALE *RAD;
         float Pitch_Target = RC.Right_Y*PITCH_SCALE*RAD;
 
-        /*** å¤–ç¯:è§’åº¦PID â†’ è¾“å‡º:è§’é€Ÿåº¦è®¾å®šå€¼ ***/
+        /*** Íâ»·:½Ç¶ÈPID Êä³ö:½ÇËÙ¶ÈÄ¿±êÖµ ***/
         PID_Angle_Roll.Target   = Roll_Target;
         PID_Angle_Roll.Actual   = Att.Roll;
         float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -314,25 +314,25 @@ void Att_Control(void *argument)
         PID_Angle_Pitch.Actual  = Att.Pitch;
         float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-        /*** å†…ç¯:è§’é€Ÿåº¦PID â†’  è¾“å‡º:æ··æ§æŒ‡ä»¤ ***/
+        /*** ÄÚ»·:½ÇËÙ¶ÈPID Êä³ö:»ì¿ØÖ¸Áî ***/
         PID_Rate_Roll.Target    = Rate_Roll_Target;
-        PID_Rate_Roll.Actual    = Gx;          //é™€èºä»ªX=æ»šè½¬è§’é€Ÿåº¦(rad/s)
+        PID_Rate_Roll.Actual    = Gx;          //ÍÓÂİÒÇX=¹ö×ª½Ç¶È(rad/s)
         float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
         PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-        PID_Rate_Pitch.Actual   = Gy;          //é™€èºä»ªY=ä¿¯ä»°è§’é€Ÿåº¦(rad/s)
+        PID_Rate_Pitch.Actual   = Gy;          //ÍÓÂİÒÇY=¸©Ñö½Ç¶È(rad/s)
         float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
         PID_Rate_Yaw.Target     = Yaw_Target;
-        PID_Rate_Yaw.Actual     = Gz;          //é™€èºä»ªZ=åèˆªè§’é€Ÿåº¦(rad/s)
+        PID_Rate_Yaw.Actual     = Gz;          //ÍÓÂİÒÇZ=Æ«º½½Ç¶È(rad/s)
         float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-        //æ²¹é—¨
+        //ÓÍÃÅ
         float Throttle          = RC.Left_Y/100.0f;
       }
-			/**PIDæ§åˆ¶ END**/
+			/**PID¿ØÖÆ END**/
     }
-    HAL_IWDG_Refresh(&hiwdg1);    //æ— æ¡ä»¶å–‚ç‹—
+    HAL_IWDG_Refresh(&hiwdg1);    //ÎŞÌõ¼şÎ¹¹·
   }
   /* USER CODE END Att_Control */
 }
@@ -356,18 +356,18 @@ void RC_Parse(void *argument)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      //ä¸´ç•ŒåŒºæ‹·è´æ•°æ®
+      //ÁÙ½çÇø¿½±´Êı¾İ
       taskENTER_CRITICAL();
       memcpy(RC_Copy,Rx_Buffer,MAX_FRAME_SIZE);
       taskEXIT_CRITICAL();
 
-      //è§£æCRSFæ•°æ®
+      //½âÎöCRSFÊı¾İ
       Process_CRSF_Data(RC_Copy,MAX_FRAME_SIZE,&RC_DATA);
 
-      //å‘é€åˆ°é˜Ÿåˆ—
+      //·¢Êı¾İµ½¶ÓÁĞ
       xQueueOverwrite(xRC_DataQ,&RC_DATA);
 
-      //é‡å¯ DMA æ¥æ”¶
+      //ÖØÆô DMA ½ÓÊÕ
       Receiver_Init();
     }
   }

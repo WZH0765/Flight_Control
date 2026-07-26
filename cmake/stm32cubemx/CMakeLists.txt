@@ -31,6 +31,7 @@ target_sources(stm32cubemx INTERFACE
     ../../Core/Src/iwdg.c
     ../../Core/Src/memorymap.c
     ../../Core/Src/spi.c
+    ../../Core/Src/tim.c
     ../../Core/Src/usart.c
     ../../Core/Src/stm32h7xx_it.c
     ../../Core/Src/stm32h7xx_hal_msp.c

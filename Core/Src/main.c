@@ -23,6 +23,7 @@
 #include "iwdg.h"
 #include "memorymap.h"
 #include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -101,6 +102,7 @@ int main(void)
   MX_IWDG1_Init();
   MX_SPI1_Init();
   MX_USART2_UART_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
