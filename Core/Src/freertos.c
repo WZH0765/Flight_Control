@@ -27,7 +27,6 @@
 /* USER CODE BEGIN Includes */
 
 #include "inv_imu_driver.h"
-#include "FreeRTOS.h"
 #include "Receiver.h"
 #include <stdint.h>
 #include <string.h>
@@ -47,18 +46,18 @@
 /* USER CODE BEGIN PD */
 
 #define ACC_SCALE  9.80f/8192.0f
-#define GYRO_SCALE 0.0174f/32.8f
+#define GYRO_SCALE 0.0174533f/32.8f
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-SemaphoreHandle_t xIMU_DataReady;     //IMUÊı¾İ¾ÍĞ÷
-SemaphoreHandle_t xRC_DataReady;      //RCÊı¾İ¾ÍĞ÷
+SemaphoreHandle_t xIMU_DataReady;     //IMUæ•°æ®å°±ç»ª
+SemaphoreHandle_t xRC_DataReady;      //RCæ•°æ®å°±ç»ª
 
-QueueHandle_t     xIMU_DataQ;         //IMUÊı¾İ¶ÓÁĞ
-QueueHandle_t     xRC_DataQ;          //RCÊı¾İ¶ÓÁĞ
+QueueHandle_t     xIMU_DataQ;         //IMUæ•°æ®é˜Ÿåˆ—
+QueueHandle_t     xRC_DataQ;          //RCæ•°æ®é˜Ÿåˆ—
 
 /* USER CODE END PM */
 
@@ -148,7 +147,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
   xRC_DataReady  = xSemaphoreCreateBinary();
-  xIMU_DataReady = xSemaphoreCreateBinary();    //´´½¨ĞÅºÅÁ¿
+  xIMU_DataReady = xSemaphoreCreateBinary();    //åˆ›å»ºä¿¡å·é‡
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -209,14 +208,15 @@ void IMU_Read(void *argument)
   (void)argument;
 
   uint16_t FIFO_CNT = 0;
-  int32_t Acc_Sum[3]  = {0};
-  int32_t Gyro_Sum[3] = {0};
   /* Infinite loop */
   for(;;)
   {
-    xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //µÈ´ıÊı¾İĞÅºÅ
+    int32_t Acc_Sum[3]  = {0};
+    int32_t Gyro_Sum[3] = {0};
 
-    inv_imu_get_frame_count(&IMU,&FIFO_CNT);    //Ö¡Êı
+    xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //ç­‰å¾…æ•°æ®ä¿¡å·
+
+    inv_imu_get_frame_count(&IMU,&FIFO_CNT);    //å¸§æ•°
 
     if(FIFO_CNT < 3 || FIFO_CNT > 10)
     {
@@ -245,12 +245,7 @@ void IMU_Read(void *argument)
     IMU_DATA.GYRO_Y = (float)Gyro_Sum[1]/FIFO_CNT;
     IMU_DATA.GYRO_Z = (float)Gyro_Sum[2]/FIFO_CNT;
     
-    memset(&Acc_Sum, 0,sizeof(Acc_Sum));      //Çå¿ÕSUM
-    memset(&Gyro_Sum,0,sizeof(Gyro_Sum));     //Çå¿ÕSUM
-
     xQueueOverwrite(xIMU_DataQ,&IMU_DATA);
-
-    inv_imu_flush_fifo(&IMU);
   }
   /* USER CODE END IMU_Read */
 }
@@ -269,20 +264,20 @@ void Att_Control(void *argument)
   (void)argument;
 
   imu_data_t IMU = {0};
-  TickType_t xLastWakeTime = xTaskGetTickCount();     //»ñÈ¡ÉÏÒ»´ÎÈÎÎñ»½ĞÑÊ±¿Ì
+  TickType_t xLastWakeTime = xTaskGetTickCount();     //è·å–ä¸Šä¸€æ¬¡ä»»åŠ¡å”¤é†’æ—¶åˆ»
 
   Filter_Init(0.5f,0.01f);
 
   /* Infinite loop */
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //¹Ì¶¨1KHz
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //å›ºå®š1KHz
 
     if(xQueueReceive(xIMU_DataQ,&IMU,0) == pdTRUE)
     {
-      //Èç¹ûÓĞÊı¾İ
+      //å¦‚æœæœ‰æ•°æ®
 
-			/*Êı¾İËõ·Å BEGIN*/
+			/*æ•°æ®ç¼©æ”¾ BEGIN*/
 			float Ax = IMU.ACC_X*ACC_SCALE;
       float Ay = IMU.ACC_Y*ACC_SCALE;
       float Az = IMU.ACC_Z*ACC_SCALE;
@@ -290,17 +285,17 @@ void Att_Control(void *argument)
       float Gx = IMU.GYRO_X*GYRO_SCALE;
       float Gy = IMU.GYRO_Y*GYRO_SCALE;
       float Gz = IMU.GYRO_Z*GYRO_SCALE;
-			/**Êı¾İËõ·Å END**/
-
-			/*×ËÌ¬½âËã BEGIN*/
+			/**æ•°æ®ç¼©æ”¾ END**/
+ 
+			/*å§¿æ€è§£ç®— BEGIN*/
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,0.001f);
-			/**×ËÌ¬½âËã END**/
+			/**å§¿æ€è§£ç®— END**/
 
-      /*PID¿ØÖÆ BEGIN*/
+      /*PIDæ§åˆ¶ BEGIN*/
 
-			/**PID¿ØÖÆ END**/
+			/**PIDæ§åˆ¶ END**/
     }
-    HAL_IWDG_Refresh(&hiwdg1);    //ÎŞÌõ¼şÎ¹¹·
+    HAL_IWDG_Refresh(&hiwdg1);    //æ— æ¡ä»¶å–‚ç‹—
   }
   /* USER CODE END Att_Control */
 }
@@ -324,18 +319,18 @@ void RC_Parse(void *argument)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      //ÁÙ½çÇø¿½±´Êı¾İ
+      //ä¸´ç•ŒåŒºæ‹·è´æ•°æ®
       taskENTER_CRITICAL();
       memcpy(RC_Copy,Rx_Buffer,MAX_FRAME_SIZE);
       taskEXIT_CRITICAL();
 
-      //½âÎöCRSFÊı¾İ
+      //è§£æCRSFæ•°æ®
       Process_CRSF_Data(RC_Copy,MAX_FRAME_SIZE,&RC_DATA);
 
-      //·¢ËÍµ½¶ÓÁĞ
+      //å‘é€åˆ°é˜Ÿåˆ—
       xQueueOverwrite(xRC_DataQ,&RC_DATA);
 
-      //ÖØÆô DMA ½ÓÊÕ
+      //é‡å¯ DMA æ¥æ”¶
       Receiver_Init();
     }
   }
