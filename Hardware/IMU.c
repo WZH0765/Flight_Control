@@ -1,10 +1,11 @@
 #include "stm32h7xx.h"                  // Device header
 #include "inv_imu_driver.h"
+#include "FreeRTOS.h"
+#include "semphr.h"
+#include "Lock.h"
 #include "stdio.h"
 #include "IMU.h"
 #include "SPI.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
 
 #define INT1
 #define MAX_LEN 96
@@ -66,7 +67,10 @@ inv_imu_fifo_data_t FIFO_Data;		//IMU原始数据
 extern SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪
 extern QueueHandle_t     xIMU_DataQ;         //IMU数据队列
 
-void IMU_Init(void)
+/*
+	IMU初始化，返回0->成功，-1->失败
+*/
+int IMU_Init(void)
 {
 	uint8_t ID = 0;
 	int status = INV_IMU_OK;
@@ -79,16 +83,11 @@ void IMU_Init(void)
 	/*define drivers_END*/
 	
 	inv_imu_get_who_am_i(&IMU,&ID);
-	if(ID == INV_IMU_WHOAMI)
+	if(ID != INV_IMU_WHOAMI)
 	{
-		printf("IMU_ReadID_OK!\r\n");
+		return -1;
 	}
-	else
-	{
-		printf("IMU_ReadID_ERROR!\r\n");
-		while(1);
-	}
-	
+
 	/*sensor mode Config_BEGIN*/
 	status |= inv_imu_set_accel_mode(&IMU,PWR_MGMT0_ACCEL_MODE_LN);
 	status |= inv_imu_set_gyro_mode(&IMU,PWR_MGMT0_GYRO_MODE_LN);
@@ -135,12 +134,12 @@ void IMU_Init(void)
 	
 	if(status == INV_IMU_OK)
 	{
-		printf("IMU_Init_OK!\r\n");
+		HW_LockState.IMU_Unlock = 1;
+		return 0;
 	}
 	else
 	{
-		printf("IMU_Init_ERROR!\r\n");
-		while(1);
+		return -1;
 	}
 }
 

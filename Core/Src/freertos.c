@@ -36,6 +36,7 @@
 #include "IMU.h"
 #include "PID.h"
 #include "tim.h"
+#include "Lock.h"
 
 /* USER CODE END Includes */
 
@@ -61,17 +62,17 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 #define PWM_MIN    900.00
 #define PWM_MAX    2000.0
 
-#define PID_NORM   0.02f
+#define PID_NORM   1.0f/50.0f
 #define PWM_RANGE  PWM_MAX - PWM_MIN
 
 #define ACC_SCALE   9.80f/8192.0f
 #define GYRO_SCALE  0.0174533f/32.8f
 
 #define RAD         0.0174533f
-#define YAW_SCALE   180.0f/100.0f   /**�?大偏航角180°**/
-#define ROLL_SCALE  45.00f/100.0f   /**�?大�?�斜�?45° **/
-#define PITCH_SCALE 45.00f/100.0f   /**�?大�?�斜�?45° **/
-#define ATT_CTRL_DT 0.001f          /***姿�?�控制周�?***/
+#define YAW_SCALE   180.0f/100.0f   /* 最大偏航角180° */
+#define ROLL_SCALE  45.00f/100.0f   /* 最大倾斜角45°  */
+#define PITCH_SCALE 45.00f/100.0f   /* 最大倾斜角45°  */
+#define ATT_CTRL_DT 0.001f          /* 姿态控制周期   */
 
 /* USER CODE END PD */
 
@@ -168,7 +169,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
   xRC_DataReady  = xSemaphoreCreateBinary();
-  xIMU_DataReady = xSemaphoreCreateBinary();    //创建信号??
+  xIMU_DataReady = xSemaphoreCreateBinary();    //创建信号
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -287,7 +288,7 @@ void Att_Control(void *argument)
   rc_data_t  RcData  = {0};     //RC 数据
   imu_data_t ImuData = {0};     //IMU数据
 
-  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时
+  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时间
 
   /* Infinite loop */
   for(;;)
@@ -297,8 +298,8 @@ void Att_Control(void *argument)
     /**获取到IMU数据**/
     if(xQueueReceive(xIMU_DataQ,&ImuData,0) == pdTRUE)
     {
-			//数据缩放
-			float Ax = ImuData.ACC_X*ACC_SCALE;
+      //数据缩放
+      float Ax = ImuData.ACC_X*ACC_SCALE;
       float Ay = ImuData.ACC_Y*ACC_SCALE;
       float Az = ImuData.ACC_Z*ACC_SCALE;
 
@@ -306,66 +307,91 @@ void Att_Control(void *argument)
       float Gy = ImuData.GYRO_Y*GYRO_SCALE;
       float Gz = ImuData.GYRO_Z*GYRO_SCALE;
 
-			//姿�?�解�?
+      //姿态解算
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,ATT_CTRL_DT);
 
       /**获取到RC数据**/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE)
       {
-        float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
-        float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
-        float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
+        Detect_Lock_t gesture =
+        {
+          .Left_X  = RcData.Left_X,
+          .Left_Y  = RcData.Left_Y,
+          .Right_X = RcData.Right_X,
+          .Right_Y = RcData.Right_Y
+        };
+        Lock_Detect(gesture);
 
-        /*** 外环:角度PID 输出:角�?�度目标�? ***/
-        PID_Angle_Roll.Target   = Roll_Target;
-        PID_Angle_Roll.Actual   = Att.Roll;
-        float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
+        /*系统更新*/
+        Lock_Update();
 
-        PID_Angle_Pitch.Target  = Pitch_Target;
-        PID_Angle_Pitch.Actual  = Att.Pitch;
-        float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
+        if(Sys_LockState.LockState == 0)
+        {
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+        }
+        else if(Sys_LockState.Locking == 1)
+        {
 
-        /*** 内环:角�?�度PID 输出:混控指令 ***/
-        PID_Rate_Roll.Target    = Rate_Roll_Target;
-        PID_Rate_Roll.Actual    = Gx;          //�?螺仪X=滚转角度(rad/s)
-        float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
+        }
+        else
+        {
+          /***正常解锁状态: 执行PID + 混控输出***/
+          float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
+          float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
+          float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
 
-        PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-        PID_Rate_Pitch.Actual   = Gy;          //�?螺仪Y=俯仰角度(rad/s)
-        float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
+          /***外环:角度PID 输出:角速度目标值***/
+          PID_Angle_Roll.Target   = Roll_Target;
+          PID_Angle_Roll.Actual   = Att.Roll;
+          float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
 
-        PID_Rate_Yaw.Target     = Yaw_Target;
-        PID_Rate_Yaw.Actual     = Gz;          //�?螺仪Z=偏航角度(rad/s)
-        float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
+          PID_Angle_Pitch.Target  = Pitch_Target;
+          PID_Angle_Pitch.Actual  = Att.Pitch;
+          float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-        //油门(0~1)
-        float Throttle = RcData.Left_Y / 100.0f;
-        if(Throttle < 0.0f) Throttle = 0.0f;
-        if(Throttle > 1.0f) Throttle = 1.0f;
+          /***内环:角速度PID 输出:混控指令***/
+          PID_Rate_Roll.Target    = Rate_Roll_Target;
+          PID_Rate_Roll.Actual    = Gx;          //陀螺仪X=滚转速度(rad/s)
+          float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
-        /** X型四轴混控 **/
-        float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;      //基准PWM
-        float BaseCorr = 0.5f*Throttle*PWM_RANGE;           //基准修正量
+          PID_Rate_Pitch.Target   = Rate_Pitch_Target;
+          PID_Rate_Pitch.Actual   = Gy;          //陀螺仪Y=俯仰速度(rad/s)
+          float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
-        //各电机对应修正量
-        float M1_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-        float M2_Corr = (+Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-        float M3_Corr = (+Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
-        float M4_Corr = (-Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          PID_Rate_Yaw.Target     = Yaw_Target;
+          PID_Rate_Yaw.Actual     = Gz;          //陀螺仪Z=偏航速度(rad/s)
+          float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-        uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
-        uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
-        uint16_t Pwm3 = (uint16_t)(BasePwm + M3_Corr);
-        uint16_t Pwm4 = (uint16_t)(BasePwm + M4_Corr);
+          //油门
+          float Throttle = RcData.Left_Y / 100.0f;
+          if(Throttle < 0.0f) Throttle = 0.0f;
+          if(Throttle > 1.0f) Throttle = 1.0f;
 
-        /*钳位输出*/
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,CLAMP(Pwm1,PWM_MIN,PWM_MAX));
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,CLAMP(Pwm2,PWM_MIN,PWM_MAX));
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,CLAMP(Pwm3,PWM_MIN,PWM_MAX));
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
+          /**X型四轴混控**/
+          float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
+          float BaseCorr = 0.5f*Throttle*PWM_RANGE;
+
+          float M1_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
+          float M2_Corr = (+Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
+          float M3_Corr = (+Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M4_Corr = (-Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+
+          uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
+          uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
+          uint16_t Pwm3 = (uint16_t)(BasePwm + M3_Corr);
+          uint16_t Pwm4 = (uint16_t)(BasePwm + M4_Corr);
+
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,CLAMP(Pwm1,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,CLAMP(Pwm2,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,CLAMP(Pwm3,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
+        }
       }
+      HAL_IWDG_Refresh(&hiwdg1);    //无条件喂狗
     }
-    HAL_IWDG_Refresh(&hiwdg1);    //无条件喂�?
   }
   /* USER CODE END Att_Control */
 }
@@ -384,12 +410,15 @@ void RC_Parse(void *argument)
   (void)argument;
 
   uint8_t RC_Copy[36] = {0};
+
+  static uint8_t First_Receive = 1;     //第一次接收到数据
+
   /* Infinite loop */
   for(;;)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      //临界区拷贝数�?
+      //临界区拷贝数据
       taskENTER_CRITICAL();
       memcpy(RC_Copy,Rx_Buffer,MAX_FRAME_SIZE);
       taskEXIT_CRITICAL();
@@ -402,6 +431,13 @@ void RC_Parse(void *argument)
 
       //重启 DMA 接收
       Receiver_Init();
+
+      //首次收到有效数据,标记接收机就绪
+      if(First_Receive != 0)
+      {
+        First_Receive = 0;
+        HW_LockState.Receiver_Unlock = 1;
+      }
     }
   }
   /* USER CODE END RC_Parse */
@@ -495,4 +531,3 @@ void Sys_Observe(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-
