@@ -16,13 +16,13 @@ typedef struct
 /*系统锁状态*/
 typedef struct
 {
-    uint8_t Locking;            // 1=蜂鸣进行中
-    uint8_t LockState;          // 0=锁定, 1=解锁
+    uint16_t BeepCnt;       // 蜂鸣相位
+    uint8_t Locking;        //1 蜂鸣进行中/正在上锁
+    uint8_t LockState;      //0 允许电机运行/1 禁止电机运行
 
-    uint16_t LockCnt;           // 解锁手势计数
-    uint16_t UnlockCnt;         // 上锁手势计数
+    uint16_t LockCnt;       // 解锁手势计数
+    uint16_t UnlockCnt;     // 上锁手势计数
 
-    float Arm_Beep_Phase;       // 蜂鸣相位
 } Sys_Lock_t;
 
 /*手势输入*/

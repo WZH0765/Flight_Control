@@ -4,7 +4,7 @@
 #include "inv_imu_driver.h"
 #include "math.h"
 
-int IMU_Init(void);   /* 返回0=成功, -1=失败 */
+void IMU_Init(void);
 
 /*DATA PROCESSED BEGIN*/
 

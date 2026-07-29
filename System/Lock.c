@@ -6,23 +6,18 @@
 HW_Lock_t  HW_LockState  = {0};
 Sys_Lock_t Sys_LockState = {0};
 
-#define LOCK_RC_THRESHOLD   80.0f
-#define LOCK_RC_HOLDTIME    1000
+#define PWM_MIN       900
 
-#define PWM_MIN 900
-#define BEEP_PWM        2000
-#define BEEP_COUNT      5
-#define BEEP_DURATION   15
-#define BEEP_PAUSE      35
-#define BEEP_CYCLE      (BEEP_DURATION + BEEP_PAUSE)
+#define LOCK_RC_THRESHOLD 80.0f
+#define LOCK_RC_HOLDTIME  1000
 
 void Lock_Init(void)
 {
+    Sys_LockState.BeepCnt = 0;
     Sys_LockState.LockCnt = 0;
+    Sys_LockState.Locking = 0;
     Sys_LockState.UnlockCnt = 0;
     Sys_LockState.LockState = 0;
-    Sys_LockState.Locking = 0;
-    Sys_LockState.Arm_Beep_Phase = 0;
 
     HW_LockState.SD_Unlock       = 0;
     HW_LockState.IMU_Unlock      = 0;
@@ -31,18 +26,18 @@ void Lock_Init(void)
     HW_LockState.Receiver_Unlock = 0;
 }
 
-void DisArm(void)
+void Disable(void)
 {
-    Sys_LockState.LockState = 1;
-    Sys_LockState.Locking = 1;
-    Sys_LockState.Arm_Beep_Phase = 0;
+    Sys_LockState.LockState = 1;        //禁止电机运行
+    Sys_LockState.Locking = 1;          //开启蜂鸣
+    Sys_LockState.BeepCnt = 0;
 }
 
-void Arm(void)
+void Enable(void)
 {
-    Sys_LockState.LockState = 0;
-    Sys_LockState.Locking = 0;
-    Sys_LockState.Arm_Beep_Phase = 0;
+    Sys_LockState.LockState = 0;        //允许电机运行
+    Sys_LockState.Locking = 1;          //开启蜂鸣
+    Sys_LockState.BeepCnt = 0;
 
     __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
     __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
@@ -50,31 +45,33 @@ void Arm(void)
     __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
 }
 
-void Lock_Detect(Detect_Lock_t gesture)
+void Lock_Detect(Detect_Lock_t Gesture)
 {
     /* 外八→解锁 */
-    if(gesture.Left_X > LOCK_RC_THRESHOLD && gesture.Right_X < -LOCK_RC_THRESHOLD)
+    if(Gesture.Left_X > LOCK_RC_THRESHOLD && Gesture.Right_X < -LOCK_RC_THRESHOLD)
     {
-        if(Sys_LockState.LockState == 0)
+        if(Sys_LockState.LockState == 1)        //当前状态为失能
         {
-            Sys_LockState.LockCnt++;
-            Sys_LockState.UnlockCnt = 0;
-            if(Sys_LockState.LockCnt >= LOCK_RC_HOLDTIME && HW_Unlock())
+            Sys_LockState.LockCnt = 0;
+            Sys_LockState.UnlockCnt ++;
+            if(Sys_LockState.UnlockCnt >= LOCK_RC_HOLDTIME && HW_Unlock())
             {
-                DisArm();
+                Enable();
+                Sys_LockState.UnlockCnt = 0;
             }
         }
     }
     /* 内八→上锁 */
-    else if(gesture.Left_X < -LOCK_RC_THRESHOLD && gesture.Right_X > LOCK_RC_THRESHOLD)
+    else if(Gesture.Left_X < -LOCK_RC_THRESHOLD && Gesture.Right_X > LOCK_RC_THRESHOLD)
     {
-        if(Sys_LockState.LockState == 1)
+        if(Sys_LockState.LockState == 0)        //当前状态为使能
         {
-            Sys_LockState.UnlockCnt++;
-            Sys_LockState.LockCnt = 0;
-            if(Sys_LockState.UnlockCnt >= LOCK_RC_HOLDTIME && HW_Unlock())
+            Sys_LockState.LockCnt ++;
+            Sys_LockState.UnlockCnt = 0;
+            if(Sys_LockState.LockCnt >= LOCK_RC_HOLDTIME)
             {
-                Arm();
+                Disable();
+                Sys_LockState.LockCnt = 0;
             }
         }
     }
@@ -85,34 +82,21 @@ void Lock_Detect(Detect_Lock_t gesture)
     }
 }
 
+/*蜂鸣总时间150ms，单次蜂鸣时间50ms*/
 void Beep(void)
 {
-    uint16_t phase = (uint16_t)Sys_LockState.Arm_Beep_Phase;
+    uint16_t Cnt = Sys_LockState.BeepCnt;
 
-    if(phase < BEEP_COUNT*BEEP_CYCLE)
+    if(Cnt < 150)       //蜂鸣未结束
     {
-        uint16_t cycle_pos = phase%BEEP_CYCLE;
+        HAL_GPIO_WritePin(BEEP_GPIO_Port, BEEP_Pin,(Cnt%50 < 35) ? GPIO_PIN_SET : GPIO_PIN_RESET);
 
-        if(cycle_pos < BEEP_DURATION)
-        {
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,BEEP_PWM);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,BEEP_PWM);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,BEEP_PWM);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,BEEP_PWM);
-        }
-        else
-        {
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,900);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,900);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,900);
-            __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,900);
-        }
+        Sys_LockState.BeepCnt ++;
 
-        Sys_LockState.Arm_Beep_Phase += 1.0f;
-
-        if(phase >= BEEP_COUNT*BEEP_CYCLE - 1)
+        if(Cnt == 150 - 1)
         {
             Sys_LockState.Locking = 0;
+            HAL_GPIO_WritePin(BEEP_GPIO_Port,BEEP_Pin,GPIO_PIN_RESET);
         }
     }
 }

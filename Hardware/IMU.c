@@ -1,3 +1,4 @@
+#include "main.h"
 #include "stm32h7xx.h"                  // Device header
 #include "inv_imu_driver.h"
 #include "FreeRTOS.h"
@@ -70,7 +71,7 @@ extern QueueHandle_t     xIMU_DataQ;         //IMU数据队列
 /*
 	IMU初始化，返回0->成功，-1->失败
 */
-int IMU_Init(void)
+void IMU_Init(void)
 {
 	uint8_t ID = 0;
 	int status = INV_IMU_OK;
@@ -85,7 +86,7 @@ int IMU_Init(void)
 	inv_imu_get_who_am_i(&IMU,&ID);
 	if(ID != INV_IMU_WHOAMI)
 	{
-		return -1;
+		Error_Handler();
 	}
 
 	/*sensor mode Config_BEGIN*/
@@ -135,11 +136,10 @@ int IMU_Init(void)
 	if(status == INV_IMU_OK)
 	{
 		HW_LockState.IMU_Unlock = 1;
-		return 0;
 	}
 	else
 	{
-		return -1;
+		Error_Handler();
 	}
 }
 

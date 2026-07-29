@@ -55,10 +55,10 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 /* USER CODE BEGIN PD */
 
 /*
-  X型四轴电机:M1前左,M2前右,M3后左,M4后右
+  X型四轴电�?:M1前左,M2前右,M3后左,M4后右
 */
 
-//电调最大/最小脉宽 us
+//电调�?�?/�?小脉�? us
 #define PWM_MIN    900.00
 #define PWM_MAX    2000.0
 
@@ -69,10 +69,10 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 #define GYRO_SCALE  0.0174533f/32.8f
 
 #define RAD         0.0174533f
-#define YAW_SCALE   180.0f/100.0f   /* 最大偏航角180° */
-#define ROLL_SCALE  45.00f/100.0f   /* 最大倾斜角45°  */
-#define PITCH_SCALE 45.00f/100.0f   /* 最大倾斜角45°  */
-#define ATT_CTRL_DT 0.001f          /* 姿态控制周期   */
+#define YAW_SCALE   180.0f/100.0f   /* �?大偏航角180° */
+#define ROLL_SCALE  45.00f/100.0f   /* �?大�?�斜�?45°  */
+#define PITCH_SCALE 45.00f/100.0f   /* �?大�?�斜�?45°  */
+#define ATT_CTRL_DT 0.001f          /* 姿�?�控制周�?   */
 
 /* USER CODE END PD */
 
@@ -285,10 +285,12 @@ void Att_Control(void *argument)
 
   (void)argument;
 
+  static uint16_t Imu_Timeout = 0;
+
   rc_data_t  RcData  = {0};     //RC 数据
   imu_data_t ImuData = {0};     //IMU数据
 
-  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时间
+  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时�?
 
   /* Infinite loop */
   for(;;)
@@ -298,6 +300,7 @@ void Att_Control(void *argument)
     /**获取到IMU数据**/
     if(xQueueReceive(xIMU_DataQ,&ImuData,0) == pdTRUE)
     {
+      Imu_Timeout = 0;
       //数据缩放
       float Ax = ImuData.ACC_X*ACC_SCALE;
       float Ay = ImuData.ACC_Y*ACC_SCALE;
@@ -307,7 +310,7 @@ void Att_Control(void *argument)
       float Gy = ImuData.GYRO_Y*GYRO_SCALE;
       float Gz = ImuData.GYRO_Z*GYRO_SCALE;
 
-      //姿态解算
+      //姿�?�解�?
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,ATT_CTRL_DT);
 
       /**获取到RC数据**/
@@ -325,25 +328,25 @@ void Att_Control(void *argument)
         /*系统更新*/
         Lock_Update();
 
-        if(Sys_LockState.LockState == 0)
+        if(Sys_LockState.LockState == 1)    //电机失能状�??
         {
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
         }
-        else if(Sys_LockState.Locking == 1)
+        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�?
         {
 
         }
-        else
+        else    //电机使能且未蜂鸣
         {
-          /***正常解锁状态: 执行PID + 混控输出***/
+          /***正常解锁状�??: 执行PID + 混控输出***/
           float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
           float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
           float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
 
-          /***外环:角度PID 输出:角速度目标值***/
+          /***外环:角度PID 输出:角�?�度目标�?***/
           PID_Angle_Roll.Target   = Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -352,17 +355,17 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角速度PID 输出:混控指令***/
+          /***内环:角�?�度PID 输出:混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
-          PID_Rate_Roll.Actual    = Gx;          //陀螺仪X=滚转速度(rad/s)
+          PID_Rate_Roll.Actual    = Gx;          //�?螺仪X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
           PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-          PID_Rate_Pitch.Actual   = Gy;          //陀螺仪Y=俯仰速度(rad/s)
+          PID_Rate_Pitch.Actual   = Gy;          //�?螺仪Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
           PID_Rate_Yaw.Target     = Yaw_Target;
-          PID_Rate_Yaw.Actual     = Gz;          //陀螺仪Z=偏航速度(rad/s)
+          PID_Rate_Yaw.Actual     = Gz;          //�?螺仪Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
           //油门
@@ -370,7 +373,7 @@ void Att_Control(void *argument)
           if(Throttle < 0.0f) Throttle = 0.0f;
           if(Throttle > 1.0f) Throttle = 1.0f;
 
-          /**X型四轴混控**/
+          /**X型四轴混�?**/
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
 
@@ -390,7 +393,20 @@ void Att_Control(void *argument)
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
         }
       }
-      HAL_IWDG_Refresh(&hiwdg1);    //无条件喂狗
+      HAL_IWDG_Refresh(&hiwdg1);    //无条件喂�?
+    }
+    else
+    {
+      Imu_Timeout ++;
+      if(Imu_Timeout > 500)
+      {
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+
+        Error_Handler();
+      }
     }
   }
   /* USER CODE END Att_Control */
@@ -409,22 +425,24 @@ void RC_Parse(void *argument)
 
   (void)argument;
 
-  uint8_t RC_Copy[36] = {0};
+  uint8_t RcCopy[36] = {0};
 
-  static uint8_t First_Receive = 1;     //第一次接收到数据
+  static uint16_t Rc_Timeout = 0;
+  static uint8_t  First_Receive = 1;     //第一次接收到数据
 
   /* Infinite loop */
   for(;;)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      //临界区拷贝数据
+      Rc_Timeout = 0;
+      //临界区拷贝数�?
       taskENTER_CRITICAL();
-      memcpy(RC_Copy,Rx_Buffer,MAX_FRAME_SIZE);
+      memcpy(RcCopy,Rx_Buffer,MAX_FRAME_SIZE);
       taskEXIT_CRITICAL();
 
       //解析CRSF数据
-      Process_CRSF_Data(RC_Copy,MAX_FRAME_SIZE,&RC_DATA);
+      Process_CRSF_Data(RcCopy,MAX_FRAME_SIZE,&RC_DATA);
 
       //发数据到队列
       xQueueOverwrite(xRC_DataQ,&RC_DATA);
@@ -432,11 +450,24 @@ void RC_Parse(void *argument)
       //重启 DMA 接收
       Receiver_Init();
 
-      //首次收到有效数据,标记接收机就绪
+      //首次收到有效数据,标记接收机就�?
       if(First_Receive != 0)
       {
         First_Receive = 0;
         HW_LockState.Receiver_Unlock = 1;
+      }
+    }
+    else
+    {
+      Rc_Timeout ++;
+      if (Rc_Timeout > 500)
+      {
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+
+        Error_Handler();
       }
     }
   }
@@ -531,3 +562,4 @@ void Sys_Observe(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
+

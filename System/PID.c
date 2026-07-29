@@ -21,9 +21,9 @@ void PID_Init(void)
 	/*INNERLOOP INIT END*/
 	
 	/*OUTTERLOOP INIT BEGIN*/
-	PID_Set_Paramaters(&PID_Angle_Pitch,4.0f,0.0f,0.0f,80.0f,200.0f);
-	PID_Set_Paramaters(&PID_Angle_Roll,4.0f,0.0f,0.0f,80.0f,200.0f);
-	PID_Set_Paramaters(&PID_Angle_Yaw,4.0f,0.0f,0.0f,80.0f,200.0f);
+	PID_Set_Paramaters(&PID_Angle_Pitch,4.0f,0.0f,0.0f,80.0f,30.0f);
+	PID_Set_Paramaters(&PID_Angle_Roll,4.0f,0.0f,0.0f,80.0f,30.0f);
+	PID_Set_Paramaters(&PID_Angle_Yaw,4.0f,0.0f,0.0f,80.0f,30.0f);
 	/*OUTTERLOOP INIT END*/
 }
 
