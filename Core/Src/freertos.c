@@ -33,6 +33,7 @@
 #include <string.h>
 #include "semphr.h"
 #include "Filter.h"
+#include "Config.h"
 #include "Error.h"
 #include "iwdg.h"
 #include "IMU.h"
@@ -56,31 +57,20 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-/*
-  X型四轴电�?:M1前左,M2前右,M3后左,M4后右
-*/
-
-//电调�?�?/�?小脉�? us
-#define ACC_SCALE   9.80f/8192.0f
-#define GYRO_SCALE  0.0174533f/32.8f
-
-#define RAD         0.0174533f
-#define YAW_SCALE   180.0f/100.0f   /* �?大偏航角180° */
-#define ROLL_SCALE  45.00f/100.0f   /* �?大�?�斜�?45°  */
-#define PITCH_SCALE 45.00f/100.0f   /* �?大�?�斜�?45°  */
-#define ATT_CTRL_DT 0.001f          /* 姿�?�控制周�?   */
 
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-#define CLAMP(value,low,high) ((value)<(low)?(low):((value)>(high)?(high):(value)))
+
 
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+
+static uint16_t Imu_Timeout = 0;
 
 /* USER CODE END Variables */
 /* Definitions for Task_IMU_Rd */
@@ -281,8 +271,6 @@ void Att_Control(void *argument)
 
   (void)argument;
 
-  static uint16_t Imu_Timeout = 0;
-
   rc_data_t  RcData  = {0};     //RC 数据
   imu_data_t ImuData = {0};     //IMU数据
 
@@ -317,10 +305,9 @@ void Att_Control(void *argument)
       {
         Detect_Lock_t gesture =
         {
-          .Left_X  = RcData.Left_X,
-          .Left_Y  = RcData.Left_Y,
-          .Right_X = RcData.Right_X,
-          .Right_Y = RcData.Right_Y
+          .Left_X   = RcData.Left_X,
+          .Right_X  = RcData.Right_X,
+          .Throttle = RcData.Left_Y/100.0f
         };
         Lock_Detect(gesture);
 
@@ -419,7 +406,9 @@ void Att_Control(void *argument)
         __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
 
-        Error_Handler();
+        Error_Code.IMU_Timeout_Error = 1;   //错误码
+
+        vTaskSuspend(NULL);
       }
     }
     HAL_IWDG_Refresh(&hiwdg1);
@@ -568,12 +557,21 @@ void Sys_Observe(void *argument)
     /*IMU超时错误*/
     else if(Error_Code.IMU_Timeout_Error == 1)
     {
-      osDelay(100);
-      
-      IMU_Init();
-      if(HW_LockState.IMU_Unlock == 1)
+      IMU_Init();   //尝试重启
+
+      if(HW_LockState.IMU_Unlock == 1) 
       {
-        break;
+        Error_Code.IMU_Timeout_Error = 0;
+        vTaskResume(Task_Att_CtrlHandle);
+        Imu_Timeout = 0;
+      }
+      else
+      {
+        static uint8_t cnt = 0;
+        if(++ cnt > 3) 
+        {
+          Error_Handler();
+        }
       }
     }
     osDelay(1);

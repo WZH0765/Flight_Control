@@ -29,9 +29,9 @@ typedef struct
 typedef struct
 {
     float Left_X;
-    float Left_Y;
     float Right_X;
-    float Right_Y;
+    float Throttle;
+
 } Detect_Lock_t;
 
 void Lock_Init(void);

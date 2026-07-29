@@ -33,6 +33,7 @@
 
 #include "Filter.h"
 #include "Error.h"
+#include "Config.h"
 #include "Lock.h"
 #include "PID.h"
 #include "IMU.h"
@@ -245,12 +246,7 @@ void Error_Handler(void)
 
   while (1)
   {
-    HAL_IWDG_Refresh(&hiwdg1);
-    
-    for(volatile int i=0; i<100000; i++); 
-    
-    //软复位
-    NVIC_SystemReset();
+    /*啥也不干，等狗咬*/
   }
   /* USER CODE END Error_Handler_Debug */
 }

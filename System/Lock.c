@@ -1,15 +1,11 @@
 #include "Receiver.h"
 #include "Lock.h"
 #include <stdio.h>
+#include "Config.h"
 #include "tim.h"
 
 HW_Lock_t  HW_LockState  = {0};
 Sys_Lock_t Sys_LockState = {0};
-
-#define PWM_MIN       900
-
-#define LOCK_RC_THRESHOLD 80.0f
-#define LOCK_RC_HOLDTIME  1000
 
 void Lock_Init(void)
 {
@@ -48,13 +44,13 @@ void Enable(void)
 void Lock_Detect(Detect_Lock_t Gesture)
 {
     /* 外八→解锁 */
-    if(Gesture.Left_X > LOCK_RC_THRESHOLD && Gesture.Right_X < -LOCK_RC_THRESHOLD)
+    if(Gesture.Left_X > LOCK_X_THRESHOLD && Gesture.Right_X < -LOCK_X_THRESHOLD &&Gesture.Throttle < LOCK_THRO_THRESHOLD)
     {
         if(Sys_LockState.LockState == 1)        //当前状态为失能
         {
             Sys_LockState.LockCnt = 0;
             Sys_LockState.UnlockCnt ++;
-            if(Sys_LockState.UnlockCnt >= LOCK_RC_HOLDTIME && HW_Unlock())
+            if(Sys_LockState.UnlockCnt >= LOCK_HOLDTIME && HW_Unlock())
             {
                 Enable();
                 Sys_LockState.UnlockCnt = 0;
@@ -62,13 +58,13 @@ void Lock_Detect(Detect_Lock_t Gesture)
         }
     }
     /* 内八→上锁 */
-    else if(Gesture.Left_X < -LOCK_RC_THRESHOLD && Gesture.Right_X > LOCK_RC_THRESHOLD)
+    else if(Gesture.Left_X < -LOCK_X_THRESHOLD && Gesture.Right_X > LOCK_X_THRESHOLD)
     {
         if(Sys_LockState.LockState == 0)        //当前状态为使能
         {
             Sys_LockState.LockCnt ++;
             Sys_LockState.UnlockCnt = 0;
-            if(Sys_LockState.LockCnt >= LOCK_RC_HOLDTIME)
+            if(Sys_LockState.LockCnt >= LOCK_HOLDTIME)
             {
                 Disable();
                 Sys_LockState.LockCnt = 0;

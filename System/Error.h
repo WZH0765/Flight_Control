@@ -3,11 +3,6 @@
 
 #include <stdint.h>
 
-#define PWM_MIN   900
-#define PWM_MAX   2000
-#define PID_NORM  1.0f/50.0f
-#define PWM_RANGE PWM_MAX - PWM_MIN
-
 typedef struct
 {
     uint8_t IMU_ReadID_Error;
