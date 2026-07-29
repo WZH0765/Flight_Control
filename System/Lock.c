@@ -17,7 +17,7 @@ void Lock_Init(void)
     Sys_LockState.LockCnt = 0;
     Sys_LockState.Locking = 0;
     Sys_LockState.UnlockCnt = 0;
-    Sys_LockState.LockState = 0;
+    Sys_LockState.LockState = 1;
 
     HW_LockState.SD_Unlock       = 0;
     HW_LockState.IMU_Unlock      = 0;

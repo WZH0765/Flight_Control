@@ -19,6 +19,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
+#include "cmsis_os2.h"
 #include "dma.h"
 #include "iwdg.h"
 #include "memorymap.h"
@@ -31,6 +32,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "Filter.h"
+#include "Error.h"
 #include "Lock.h"
 #include "PID.h"
 #include "IMU.h"
@@ -235,8 +237,20 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
+
+  __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+
   while (1)
   {
+    HAL_IWDG_Refresh(&hiwdg1);
+    
+    for(volatile int i=0; i<100000; i++); 
+    
+    //软复位
+    NVIC_SystemReset();
   }
   /* USER CODE END Error_Handler_Debug */
 }

@@ -1,9 +1,11 @@
 #ifndef __RECEIVER_H__
 #define __RECEIVER_H__
 
-#include "stm32h7xx.h"                  // Device header
+#include <stdint.h>
+#include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
+#include "stm32h7xx.h"
 
 #define MAX_FRAME_SIZE 36									// 空闲中断接收的最大帧长
 
@@ -71,6 +73,8 @@ typedef struct
 	uint8_t Lever_B;		//拨杆B
 	uint8_t Lever_C;		//拨杆C
 	uint8_t Lever_D;		//拨杆D
+
+	TickType_t TimeStamp;	//每帧数据时间戳
 	
 /*******RC_CHANNELS_PACKED RC_DATA END*******/
 

@@ -19,6 +19,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "stm32h7xx.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -32,6 +33,7 @@
 #include <string.h>
 #include "semphr.h"
 #include "Filter.h"
+#include "Error.h"
 #include "iwdg.h"
 #include "IMU.h"
 #include "PID.h"
@@ -59,12 +61,6 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 */
 
 //电调�?�?/�?小脉�? us
-#define PWM_MIN    900.00
-#define PWM_MAX    2000.0
-
-#define PID_NORM   1.0f/50.0f
-#define PWM_RANGE  PWM_MAX - PWM_MIN
-
 #define ACC_SCALE   9.80f/8192.0f
 #define GYRO_SCALE  0.0174533f/32.8f
 
@@ -290,17 +286,20 @@ void Att_Control(void *argument)
   rc_data_t  RcData  = {0};     //RC 数据
   imu_data_t ImuData = {0};     //IMU数据
 
+  TickType_t xCurrentTime;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时�?
 
   /* Infinite loop */
   for(;;)
   {
     vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(1));     //固定1KHz
+    xCurrentTime = xTaskGetTickCount();                   //当前时间
 
     /**获取到IMU数据**/
     if(xQueueReceive(xIMU_DataQ,&ImuData,0) == pdTRUE)
     {
       Imu_Timeout = 0;
+
       //数据缩放
       float Ax = ImuData.ACC_X*ACC_SCALE;
       float Ay = ImuData.ACC_Y*ACC_SCALE;
@@ -313,8 +312,8 @@ void Att_Control(void *argument)
       //姿�?�解�?
       Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,ATT_CTRL_DT);
 
-      /**获取到RC数据**/
-      if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE)
+      /**获取到RC数据 RC数据有效性**/
+      if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
       {
         Detect_Lock_t gesture =
         {
@@ -377,10 +376,10 @@ void Att_Control(void *argument)
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
 
-          float M1_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-          float M2_Corr = (+Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-          float M3_Corr = (+Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
-          float M4_Corr = (-Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw) * BaseCorr * PID_NORM;
+          float M2_Corr = (-Out_Roll + Out_Pitch + Out_Yaw) * BaseCorr * PID_NORM;
+          float M3_Corr = ( Out_Roll - Out_Pitch - Out_Yaw) * BaseCorr * PID_NORM;
+          float M4_Corr = (-Out_Roll - Out_Pitch + Out_Yaw) * BaseCorr * PID_NORM;
 
           uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
           uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
@@ -393,11 +392,26 @@ void Att_Control(void *argument)
           __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
         }
       }
-      HAL_IWDG_Refresh(&hiwdg1);    //无条件喂�?
+      else /*RC数据异常处理*/
+      {
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+
+        //清零内/外环积分，防止积分饱和
+        PID_Rate_Yaw.ErrorInt    = 0.0f;
+        PID_Rate_Roll.ErrorInt   = 0.0f;
+        PID_Rate_Pitch.ErrorInt  = 0.0f;
+
+        PID_Angle_Roll.ErrorInt  = 0.0f;
+        PID_Angle_Pitch.ErrorInt = 0.0f;
+      }
     }
-    else
+    else /*IMU数据异常处理*/
     {
       Imu_Timeout ++;
+
       if(Imu_Timeout > 500)
       {
         __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
@@ -408,6 +422,7 @@ void Att_Control(void *argument)
         Error_Handler();
       }
     }
+    HAL_IWDG_Refresh(&hiwdg1);
   }
   /* USER CODE END Att_Control */
 }
@@ -424,10 +439,10 @@ void RC_Parse(void *argument)
   /* USER CODE BEGIN RC_Parse */
 
   (void)argument;
+  Receiver_Init();
 
   uint8_t RcCopy[36] = {0};
 
-  static uint16_t Rc_Timeout = 0;
   static uint8_t  First_Receive = 1;     //第一次接收到数据
 
   /* Infinite loop */
@@ -435,7 +450,6 @@ void RC_Parse(void *argument)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      Rc_Timeout = 0;
       //临界区拷贝数�?
       taskENTER_CRITICAL();
       memcpy(RcCopy,Rx_Buffer,MAX_FRAME_SIZE);
@@ -444,6 +458,7 @@ void RC_Parse(void *argument)
       //解析CRSF数据
       Process_CRSF_Data(RcCopy,MAX_FRAME_SIZE,&RC_DATA);
 
+      RC_DATA.TimeStamp = xTaskGetTickCount();
       //发数据到队列
       xQueueOverwrite(xRC_DataQ,&RC_DATA);
 
@@ -455,19 +470,6 @@ void RC_Parse(void *argument)
       {
         First_Receive = 0;
         HW_LockState.Receiver_Unlock = 1;
-      }
-    }
-    else
-    {
-      Rc_Timeout ++;
-      if (Rc_Timeout > 500)
-      {
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
-        __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
-
-        Error_Handler();
       }
     }
   }
@@ -553,6 +555,27 @@ void Sys_Observe(void *argument)
   /* Infinite loop */
   for(;;)
   {
+    /*IMU读取ID错误*/
+    if(Error_Code.IMU_ReadID_Error == 1)
+    {
+
+    }
+    /*IMU配置错误*/
+    else if(Error_Code.IMU_Config_Error == 1)
+    {
+
+    }
+    /*IMU超时错误*/
+    else if(Error_Code.IMU_Timeout_Error == 1)
+    {
+      osDelay(100);
+      
+      IMU_Init();
+      if(HW_LockState.IMU_Unlock == 1)
+      {
+        break;
+      }
+    }
     osDelay(1);
   }
   /* USER CODE END Sys_Observe */

@@ -3,8 +3,9 @@
 #include "inv_imu_driver.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
-#include "Lock.h"
+#include "Error.h"
 #include "stdio.h"
+#include "Lock.h"
 #include "IMU.h"
 #include "SPI.h"
 
@@ -86,6 +87,7 @@ void IMU_Init(void)
 	inv_imu_get_who_am_i(&IMU,&ID);
 	if(ID != INV_IMU_WHOAMI)
 	{
+		Error_Code.IMU_ReadID_Error = 1;
 		Error_Handler();
 	}
 
@@ -139,6 +141,7 @@ void IMU_Init(void)
 	}
 	else
 	{
+		Error_Code.IMU_Config_Error = 1;
 		Error_Handler();
 	}
 }

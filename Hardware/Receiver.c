@@ -1,8 +1,4 @@
 #include "Receiver.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
-#include "string.h"
-#include "stdio.h"
 #include "usart.h"
 
 /*接收缓冲区*/
