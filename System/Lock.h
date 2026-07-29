@@ -20,8 +20,8 @@ typedef struct
     uint8_t Locking;        //1 蜂鸣进行中/正在上锁
     uint8_t LockState;      //0 允许电机运行/1 禁止电机运行
 
-    uint16_t LockCnt;       // 解锁手势计数
-    uint16_t UnlockCnt;     // 上锁手势计数
+    uint16_t LockCnt;       //上锁手势计数
+    uint16_t UnlockCnt;     //解锁手势计数
 
 } Sys_Lock_t;
 

@@ -64,7 +64,6 @@ QueueHandle_t     xRC_DataQ;          //RC数据队列
 /* USER CODE BEGIN PM */
 
 
-
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -547,12 +546,12 @@ void Sys_Observe(void *argument)
     /*IMU读取ID错误*/
     if(Error_Code.IMU_ReadID_Error == 1)
     {
-
+      Error_Handler();
     }
     /*IMU配置错误*/
     else if(Error_Code.IMU_Config_Error == 1)
     {
-
+      Error_Handler();
     }
     /*IMU超时错误*/
     else if(Error_Code.IMU_Timeout_Error == 1)
@@ -574,6 +573,7 @@ void Sys_Observe(void *argument)
         }
       }
     }
+    
     osDelay(1);
   }
   /* USER CODE END Sys_Observe */

@@ -88,7 +88,7 @@ void IMU_Init(void)
 	if(ID != INV_IMU_WHOAMI)
 	{
 		Error_Code.IMU_ReadID_Error = 1;
-		Error_Handler();
+		return ;
 	}
 
 	/*sensor mode Config_BEGIN*/
@@ -142,7 +142,7 @@ void IMU_Init(void)
 	else
 	{
 		Error_Code.IMU_Config_Error = 1;
-		Error_Handler();
+		return ;
 	}
 }
 
