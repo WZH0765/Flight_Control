@@ -11,21 +11,21 @@ void IMU_Init(void);
 //经过处理的数据
 typedef struct
 {
-	float ACC_X;
-	float ACC_Y;
-	float ACC_Z;
+	float Ax;
+	float Ay;
+	float Az;
 	
-	float GYRO_X;
-	float GYRO_Y;
-	float GYRO_Z;
+	float Gx;
+	float Gy;
+	float Gz;
 
 } imu_data_t;
 
 //未经处理的数据
 typedef struct
 {
-    int16_t ACC[3];
-    int16_t GYRO[3];
+    int16_t  Acc[3];
+    int16_t Gyro[3];
 
 } imu_raw_t;
 

@@ -164,7 +164,7 @@ void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN RTOS_QUEUES */
 
   xRC_DataQ  = xQueueCreate(1,sizeof(RC_DATA));
-  xIMU_DataQ = xQueueCreate(1,sizeof(IMU_DATA));
+  xIMU_DataQ = xQueueCreate(1,sizeof(IMU_RAW));
   
   /* USER CODE END RTOS_QUEUES */
 
@@ -246,15 +246,15 @@ void IMU_Read(void *argument)
       GyroSum[2] += FIFO_Data.byte_16.gyro_data[2];
     }
 
-    IMU_DATA.ACC_X = (float)AccSum[0]/Cnt;
-    IMU_DATA.ACC_Y = (float)AccSum[1]/Cnt;
-    IMU_DATA.ACC_Z = (float)AccSum[2]/Cnt;
+    IMU_RAW.Acc[0] = AccSum[0]/Cnt;
+    IMU_RAW.Acc[1] = AccSum[1]/Cnt;
+    IMU_RAW.Acc[2] = AccSum[2]/Cnt;
 
-    IMU_DATA.GYRO_X = (float)GyroSum[0]/Cnt;
-    IMU_DATA.GYRO_Y = (float)GyroSum[1]/Cnt;
-    IMU_DATA.GYRO_Z = (float)GyroSum[2]/Cnt;
+    IMU_RAW.Gyro[0] = GyroSum[0]/Cnt;
+    IMU_RAW.Gyro[1] = GyroSum[1]/Cnt;
+    IMU_RAW.Gyro[2] = GyroSum[2]/Cnt;
 
-    xQueueOverwrite(xIMU_DataQ,&IMU_DATA);
+    xQueueOverwrite(xIMU_DataQ,&IMU_RAW);
   }
   /* USER CODE END IMU_Read */
 }
@@ -273,7 +273,8 @@ void Att_Control(void *argument)
   (void)argument;
 
   rc_data_t  RcData  = {0};     //RC 数据
-  imu_data_t ImuData = {0};     //IMU数据
+  imu_raw_t  ImuRaw  = {0};     //IMU原始数据
+  imu_data_t ImuData = {0};     //IMU缩放数据
 
   TickType_t xCurrentTime;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时�?????
@@ -285,21 +286,21 @@ void Att_Control(void *argument)
     xCurrentTime = xTaskGetTickCount();                   //当前时间
 
     /**获取到IMU数据**/
-    if(xQueueReceive(xIMU_DataQ,&ImuData,0) == pdTRUE)
+    if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)
     {
       Imu_Timeout = 0;
 
       //数据缩放
-      float Ax = ImuData.ACC_X*ACC_SCALE;
-      float Ay = ImuData.ACC_Y*ACC_SCALE;
-      float Az = ImuData.ACC_Z*ACC_SCALE;
+      ImuData.Ax = ImuRaw.Acc[0]*ACC_SCALE;
+      ImuData.Ay = ImuRaw.Acc[1]*ACC_SCALE;
+      ImuData.Az = ImuRaw.Acc[2]*ACC_SCALE;
 
-      float Gx = ImuData.GYRO_X*GYRO_SCALE;
-      float Gy = ImuData.GYRO_Y*GYRO_SCALE;
-      float Gz = ImuData.GYRO_Z*GYRO_SCALE;
+      ImuData.Gx = ImuRaw.Gyro[0]*GYRO_SCALE;
+      ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
+      ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
 
       //姿�?�解�?????
-      Filter_Update(Ax,Ay,Az,Gx,Gy,Gz,ATT_CTRL_DT);
+      Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
       /**获取到RC数据 RC数据有效�????**/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
@@ -344,15 +345,15 @@ void Att_Control(void *argument)
 
           /***内环:角�?�度PID 输出:混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
-          PID_Rate_Roll.Actual    = Gx;          //�?????螺仪X=滚转速度(rad/s)
+          PID_Rate_Roll.Actual    = ImuData.Gx;          //�?????螺仪X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
           PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-          PID_Rate_Pitch.Actual   = Gy;          //�?????螺仪Y=俯仰速度(rad/s)
+          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�?????螺仪Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
           PID_Rate_Yaw.Target     = Yaw_Target;
-          PID_Rate_Yaw.Actual     = Gz;          //�?????螺仪Z=偏航速度(rad/s)
+          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�?????螺仪Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
           //油门
@@ -364,10 +365,10 @@ void Att_Control(void *argument)
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
 
-          float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw) * BaseCorr * PID_NORM;
-          float M2_Corr = (-Out_Roll + Out_Pitch + Out_Yaw) * BaseCorr * PID_NORM;
-          float M3_Corr = ( Out_Roll - Out_Pitch - Out_Yaw) * BaseCorr * PID_NORM;
-          float M4_Corr = (-Out_Roll - Out_Pitch + Out_Yaw) * BaseCorr * PID_NORM;
+          float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M2_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
+          float M3_Corr = ( Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M4_Corr = (-Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
 
           uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
           uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
