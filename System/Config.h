@@ -5,7 +5,7 @@
 /****IMU define BEGIN****/
 #define RAD         0.0174533f
 
-#define ACC_SCALE   9.80f/8192.0f
+#define ACC_SCALE   9.80f/8192.0f     //m/s^2
 #define GYRO_SCALE  0.0174533f/32.8f
 
 #define YAW_SCALE   180.0f/100.0f
