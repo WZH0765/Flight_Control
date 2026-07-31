@@ -35,10 +35,10 @@ void Enable(void)
     Sys_LockState.Locking = 1;          //开启蜂鸣
     Sys_LockState.BeepCnt = 0;
 
-    __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_1,PWM_MIN);
-    __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_2,PWM_MIN);
-    __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_3,PWM_MIN);
-    __HAL_TIM_SET_COMPARE(&htim8,TIM_CHANNEL_4,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 }
 
 void Lock_Detect(Detect_Lock_t Gesture)
