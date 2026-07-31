@@ -70,7 +70,7 @@ extern SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪
 extern QueueHandle_t     xIMU_DataQ;         //IMU数据队列
 
 /*
-	IMU初始化，返回0->成功，-1->失败
+	IMU初始化
 */
 void IMU_Init(void)
 {
@@ -116,7 +116,7 @@ void IMU_Init(void)
 	
 	status |= inv_imu_set_fifo_config(&IMU,&FIFO_Config);
 	/*FIFO Config_END*/
-		
+	
 #ifdef INT1
 	/*INT1 Config_BEGIN*/
 	inv_imu_int_pin_config_t PIN1_Config =

@@ -19,7 +19,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "cmsis_os2.h"
 #include "dma.h"
 #include "iwdg.h"
 #include "memorymap.h"
