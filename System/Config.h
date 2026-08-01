@@ -24,9 +24,13 @@
 /**CONTROL_TASK define END**/
 
 /*LOCK_TASK define BEGIN*/
-#define LOCK_HOLDTIME  1000
-#define LOCK_X_THRESHOLD 80.0f
+#define LOCK_HOLDTIME        1000
+#define LOCK_X_THRESHOLD     80.0f
 #define LOCK_THRO_THRESHOLD  0.05f
 /*LOCK_TASK define END*/
+
+/*LOG_TASK define BEGIN*/
+#define LOG_BUF_SIZE      128
+/**LOG_TASK define END**/
 
 #define CLAMP(value,low,high) ((value)<(low)?(low):((value)>(high)?(high):(value)))

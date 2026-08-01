@@ -35,10 +35,12 @@
 #include "Config.h"
 #include "Error.h"
 #include "iwdg.h"
+#include "Lock.h"
 #include "IMU.h"
 #include "PID.h"
 #include "tim.h"
-#include "Lock.h"
+#include "Log.h"
+#include "ff.h"
 
 /* USER CODE END Includes */
 
@@ -48,6 +50,7 @@
 SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪
 SemaphoreHandle_t xRC_DataReady;      //RC数据就绪
 
+QueueHandle_t     xLOG_DataQ;         //LOG数据队列
 QueueHandle_t     xIMU_DataQ;         //IMU数据队列
 QueueHandle_t     xRC_DataQ;          //RC数据队列
 
@@ -152,8 +155,8 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
-  xRC_DataReady  = xSemaphoreCreateBinary();
-  xIMU_DataReady = xSemaphoreCreateBinary();    //创建信号
+  xRC_DataReady  = xSemaphoreCreateBinary();                   //状�?�信号量
+  xIMU_DataReady = xSemaphoreCreateBinary();                   //状�?�信号量
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -165,6 +168,7 @@ void MX_FREERTOS_Init(void) {
 
   xRC_DataQ  = xQueueCreate(1,sizeof(RC_DATA));
   xIMU_DataQ = xQueueCreate(1,sizeof(IMU_RAW));
+  xLOG_DataQ = xQueueCreate(LOG_QUEUE_LEN,sizeof(log_data_t));
   
   /* USER CODE END RTOS_QUEUES */
 
@@ -223,7 +227,7 @@ void IMU_Read(void *argument)
 
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //等待数据信号
 
-    inv_imu_get_frame_count(&IMU,&Cnt);    //获取FIFO字节数（实际�????48字节�????
+    inv_imu_get_frame_count(&IMU,&Cnt);    //获取FIFO字节数（实际�?????48字节�?????
 
     Cnt = Cnt/16;       //转换为帧数（48/16 = 3帧）
 
@@ -277,7 +281,7 @@ void Att_Control(void *argument)
   imu_data_t ImuData = {0};     //IMU缩放数据
 
   TickType_t xCurrentTime;
-  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时�??????
+  TickType_t xLastWakeTime = xTaskGetTickCount();     //获取上一次任务唤醒时�???????
 
   /* Infinite loop */
   for(;;)
@@ -299,10 +303,10 @@ void Att_Control(void *argument)
       ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
       ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
 
-      //姿�?�解�??????
+      //姿�?�解�???????
       Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
-      /**获取到RC数据 RC数据有效�?????**/
+      /**获取到RC数据 RC数据有效�??????**/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
       {
         Detect_Lock_t gesture =
@@ -323,7 +327,7 @@ void Att_Control(void *argument)
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
         }
-        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�??????
+        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�???????
         {
 
         }
@@ -334,7 +338,7 @@ void Att_Control(void *argument)
           float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
           float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
 
-          /***外环:角度PID 输出:角�?�度目标�??????***/
+          /***外环:角度PID 输出:角�?�度目标�???????***/
           PID_Angle_Roll.Target   = Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -345,15 +349,15 @@ void Att_Control(void *argument)
 
           /***内环:角�?�度PID 输出:混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
-          PID_Rate_Roll.Actual    = ImuData.Gx;          //�??????螺仪X=滚转速度(rad/s)
+          PID_Rate_Roll.Actual    = ImuData.Gx;          //�???????螺仪X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
           PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�??????螺仪Y=俯仰速度(rad/s)
+          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�???????螺仪Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
           PID_Rate_Yaw.Target     = Yaw_Target;
-          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�??????螺仪Z=偏航速度(rad/s)
+          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�???????螺仪Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
           //油门
@@ -361,7 +365,7 @@ void Att_Control(void *argument)
           if(Throttle < 0.0f) Throttle = 0.0f;
           if(Throttle > 1.0f) Throttle = 1.0f;
 
-          /**X型四轴混�??????**/
+          /**X型四轴混�???????**/
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
 
@@ -388,7 +392,7 @@ void Att_Control(void *argument)
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //清零�?????/外环积分，防止积分饱�?????
+        //清零�??????/外环积分，防止积分饱�??????
         PID_Rate_Yaw.ErrorInt    = 0.0f;
         PID_Rate_Roll.ErrorInt   = 0.0f;
         PID_Rate_Pitch.ErrorInt  = 0.0f;
@@ -408,7 +412,7 @@ void Att_Control(void *argument)
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        Error_Code.IMU_Timeout_Error = 1;   //错误�?????
+        Error_Code.IMU_Timeout_Error = 1;   //错误�??????
 
         vTaskSuspend(NULL);
       }
@@ -441,7 +445,7 @@ void RC_Parse(void *argument)
   {
     if(xSemaphoreTake(xRC_DataReady,portMAX_DELAY) == pdTRUE)
     {
-      //临界区拷贝数�??????
+      //临界区拷贝数�???????
       taskENTER_CRITICAL();
       memcpy(RcCopy,Rx_Buffer,MAX_FRAME_SIZE);
       taskEXIT_CRITICAL();
@@ -456,7 +460,7 @@ void RC_Parse(void *argument)
       //重启 DMA 接收
       Receiver_Init();
 
-      //首次收到有效数据,标记接收机就�??????
+      //首次收到有效数据,标记接收机就�???????
       if(First_Receive != 0)
       {
         First_Receive = 0;
@@ -522,10 +526,19 @@ void Log_Write(void *argument)
 
   (void)argument;
 
+  log_data_t LogData;
+
   /* Infinite loop */
   for(;;)
   {
-    osDelay(1);
+    if(xQueueReceive(xLOG_DataQ, &LogData, pdMS_TO_TICKS(100)) == pdTRUE)
+    {
+      Log_Save(&LogData);
+    }
+    else
+    {
+      Log_Sync();
+    }
   }
   /* USER CODE END Log_Write */
 }
@@ -575,6 +588,12 @@ void Sys_Observe(void *argument)
           Error_Handler();
         }
       }
+    }
+
+    /*LOG挂载SD卡错�?*/
+    else if(Error_Code.LOG_Mount_Error == 1)
+    {
+
     }
     
     osDelay(1);
