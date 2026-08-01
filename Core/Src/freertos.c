@@ -19,6 +19,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "projdefs.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -34,6 +35,7 @@
 #include "Filter.h"
 #include "Config.h"
 #include "Error.h"
+#include "fatfs.h"
 #include "iwdg.h"
 #include "Lock.h"
 #include "IMU.h"
@@ -222,8 +224,8 @@ void IMU_Read(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    int16_t AccSum[3]  = {0};
-    int16_t GyroSum[3] = {0};
+    int32_t AccSum[3]  = {0};
+    int32_t GyroSum[3] = {0};
 
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);     //等待数据信号
 
@@ -528,16 +530,23 @@ void Log_Write(void *argument)
 
   log_data_t LogData;
 
+  TickType_t xCurrentTime;
+  TickType_t xLastSyncTime = xTaskGetTickCount();
+
   /* Infinite loop */
   for(;;)
   {
-    if(xQueueReceive(xLOG_DataQ, &LogData, pdMS_TO_TICKS(100)) == pdTRUE)
+    if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(100)) == pdTRUE)
     {
       Log_Save(&LogData);
     }
-    else
+
+    xCurrentTime = xTaskGetTickCount();
+
+    if(xCurrentTime - xLastSyncTime >= pdMS_TO_TICKS(5000))
     {
       Log_Sync();
+      xLastSyncTime = xCurrentTime;
     }
   }
   /* USER CODE END Log_Write */
@@ -565,12 +574,12 @@ void Sys_Observe(void *argument)
       Error_Handler();
     }
     /*IMU配置错误*/
-    else if(Error_Code.IMU_Config_Error == 1)
+    if(Error_Code.IMU_Config_Error == 1)
     {
       Error_Handler();
     }
     /*IMU超时错误*/
-    else if(Error_Code.IMU_Timeout_Error == 1)
+    if(Error_Code.IMU_Timeout_Error == 1)
     {
       IMU_Init();   //尝试重启
 
@@ -583,17 +592,80 @@ void Sys_Observe(void *argument)
       else
       {
         static uint8_t cnt = 0;
-        if(++ cnt > 3) 
+        if((++ cnt) > 3) 
         {
           Error_Handler();
         }
       }
     }
 
-    /*LOG挂载SD卡错�?*/
-    else if(Error_Code.LOG_Mount_Error == 1)
+    /*LOG挂载SD卡错误*/
+    if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
+      static uint16_t cnt = 0;
 
+      if((++ cnt)%500 == 0)
+      {
+        FRESULT res = f_mount(&SDFatFS,SDPath,1);
+        if(res == FR_OK)
+        {
+          cnt = 0;
+          Log_Status.Ready = 1;
+          Error_Code.LOG_Mount_Error = 0;
+
+          if(Log_Open() == 0)
+          {
+            Error_Code.LOG_Open_Error = 1;
+          }
+        }
+        else
+        {
+          if((cnt/500) > 20)
+          {
+            //放弃尝试，静默错误
+            Giveup_Code.LOG_Mount_Giveup = 1;
+          }
+        }
+      }
+    }
+    /*LOG打开文件错误*/
+    if(Error_Code.LOG_Open_Error == 1 && Giveup_Code.LOG_Open_Giveup == 0)
+    {
+      static uint16_t cnt = 0;
+
+      if((++ cnt)%50 == 0)           //50ms间隔
+      {
+        if(Log_Status.Ready && Log_Open())
+        {
+          cnt = 0;
+          Error_Code.LOG_Open_Error = 0;
+          Giveup_Code.LOG_Open_Giveup = 0;
+        }
+        else if(cnt/50 > 150)   //尝试150次
+        {
+          //放弃尝试，静默错误
+          Giveup_Code.LOG_Open_Giveup = 1;
+        }
+      }
+    }
+    /*LOG写入文件错误*/
+    if(Error_Code.LOG_Write_Error == 1 && Giveup_Code.LOG_Write_Giveup == 0)
+    {
+      static uint16_t cnt = 0;
+      if((++ cnt)%50 == 0)
+      {
+        if(Log_Status.Ready && Log_Open() == 1)
+        {
+          cnt = 0;
+          Error_Code.LOG_Write_Error = 0;
+          Giveup_Code.LOG_Write_Giveup = 0;
+        }
+        else if(cnt/50 > 100)
+        {
+          //放弃尝试，静默错误
+          Giveup_Code.LOG_Write_Giveup = 1;
+        }
+      }
     }
     
     osDelay(1);

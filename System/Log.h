@@ -7,7 +7,7 @@
 #define LOG_FILE_MAX_SIZE (1024 * 1024)
 #define LOG_QUEUE_LEN     256
 
-/*记录一帧飞控数据*/
+/*一帧飞控数据*/
 typedef struct
 {
     float Ax;

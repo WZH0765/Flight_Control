@@ -3,6 +3,10 @@
 
 #include <stdint.h>
 
+/*
+*   1 有错误
+*   0 无错误
+*/
 typedef struct
 {
     uint8_t IMU_ReadID_Error;   //读ID错误
@@ -15,8 +19,21 @@ typedef struct
 
     uint8_t RC_Config_Error;
 
-} Error_t;
+} error_t;
 
-extern Error_t Error_Code;
+/*
+*   1 放弃尝试
+*   0 继续尝试
+*/
+typedef struct
+{
+    uint8_t LOG_Open_Giveup;
+    uint8_t LOG_Mount_Giveup;
+    uint8_t LOG_Write_Giveup;
+
+} giveup_t;
+
+extern error_t Error_Code;
+extern giveup_t Giveup_Code;
 
 #endif

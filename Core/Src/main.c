@@ -38,6 +38,7 @@
 #include "Lock.h"
 #include "PID.h"
 #include "IMU.h"
+#include "Log.h"
 
 /* USER CODE END Includes */
 
@@ -112,10 +113,17 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
+  Log_Init();
   IMU_Init();
   PID_Init();
   Lock_Init();
   Filter_Init(0.5f,0.01f);
+
+  if(Log_Status.Ready)
+  {
+    Log_Open();
+  }
+
 
   /*启动TIM8 PWM输出*/
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
