@@ -1,12 +1,11 @@
 #include "FreeRTOS.h"
 #include "Config.h"
+#include <string.h>
+#include <stdio.h>
 #include "queue.h"
 #include "fatfs.h"
 #include "Error.h"
 #include "Log.h"
-
-#include <stdio.h>
-#include <string.h>
 
 static FIL  Log_File;
 static char Log_Line[512];
