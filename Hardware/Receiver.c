@@ -188,23 +188,3 @@ void Process_CRSF_Data(uint8_t *Input,uint16_t size,rc_data_t *Output)
 		Output->HEARTBEAT_COUNTER = (uint16_t)Input[3] | ((uint16_t)Input[4] << 8);
 	}
 }
-
-/*
-	上一帧数据接收完成，下一帧数据还未到来
-	调用此函数，处理数据
-*/
-
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
-{
-	(void)Size;
-	
-	/*串口2空闲*/
-	if(huart == &huart2)
-	{
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-        //唤醒RC_Parse任务
-        xSemaphoreGiveFromISR(xRC_DataReady,&xHigherPriorityTaskWoken);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	}
-}

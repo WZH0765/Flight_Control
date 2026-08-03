@@ -5,7 +5,6 @@
 
 /*日志文件最大尺寸(字节)：1MB*/
 #define LOG_FILE_MAX_SIZE (1024 * 1024)
-#define LOG_QUEUE_LEN     256
 
 /*一帧飞控数据*/
 typedef struct

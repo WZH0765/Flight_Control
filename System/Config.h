@@ -1,5 +1,5 @@
 /*
-  X型四轴电�?:M1前左,M2前右,M3后左,M4后右
+  X型四轴电机:M1前左,M2前右,M3后左,M4后右
 */
 
 /****IMU define BEGIN****/
@@ -29,8 +29,16 @@
 #define LOCK_THRO_THRESHOLD  0.05f
 /*LOCK_TASK define END*/
 
-/*LOG_TASK define BEGIN*/
 #define LOG_BUF_SIZE      128
-/**LOG_TASK define END**/
+#define LOG_QUEUE_LEN     256
+
+/*GPS_TASK define BEGIN*/
+#define GPS_LINE_MAX_LEN   100     //NMEA语句最大长度(含$和校验)
+
+//定位状态
+#define GPS_FIX_2D         1       //2D定位
+#define GPS_FIX_3D         2       //3D定位
+#define GPS_FIX_INVALID    0       //无定位
+/*GPS_TASK define END*/
 
 #define CLAMP(value,low,high) ((value)<(low)?(low):((value)>(high)?(high):(value)))

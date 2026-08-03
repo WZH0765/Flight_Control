@@ -32,18 +32,24 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "FreeRTOS.h"
+#include "semphr.h"
 #include "Filter.h"
-#include "Error.h"
 #include "Config.h"
+#include "Error.h"
 #include "Lock.h"
 #include "PID.h"
 #include "IMU.h"
+#include "GPS.h"
 #include "Log.h"
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+extern SemaphoreHandle_t xGPS_DataReady;     //GPSć°ćŽĺ°ąçťŞäżĄĺˇé?
+extern SemaphoreHandle_t xRC_DataReady;      //RC ć°ćŽĺ°ąçťŞäżĄĺˇé?
 
 /* USER CODE END PTD */
 
@@ -60,6 +66,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+
+uint8_t GPS_RxBuffer[100] = {0};   //GPS DMA接收缓冲
+
+volatile uint16_t GPS_RxLength = 0;              //GPS本次接收长度
 
 /* USER CODE END PV */
 
@@ -111,10 +121,13 @@ int main(void)
   MX_SDMMC1_SD_Init();
   MX_TIM1_Init();
   MX_FATFS_Init();
+  MX_USART1_UART_Init();
+  MX_USART3_UART_Init();
   /* USER CODE BEGIN 2 */
 
   Log_Init();
   IMU_Init();
+  GPS_Init();
   PID_Init();
   Lock_Init();
   Filter_Init(0.5f,0.01f);
@@ -124,13 +137,16 @@ int main(void)
     Log_Open();
   }
 
-
-  /*启动TIM8 PWM输出*/
+  /*ĺŻĺ¨TIM8 PWMčžĺş*/
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
   __HAL_TIM_MOE_ENABLE(&htim1);
+
+  /*启动GPS串口3空闲中断DMA接收*/
+  HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
+  __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);   //禁用半传输中断
 
   /* USER CODE END 2 */
 
@@ -217,6 +233,32 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
+/*
+	ä¸ä¸ĺ¸§ć°ćŽćĽćśĺŽćďźä¸ä¸ĺ¸§ć°ćŽčżćŞĺ°ć?
+	č°ç¨ć­¤ĺ˝ć°ďźĺ¤çć°ćŽ
+*/
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+{
+	/*ä¸˛ĺŁ2çŠşé˛*/
+	if(huart == &huart2)
+	{
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+    //ĺ¤éRC_ParseäťťĺĄ
+    xSemaphoreGiveFromISR(xRC_DataReady,&xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+  if(huart == &huart3)
+	{
+		GPS_RxLength = Size;
+
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    //唤醒Sen_Read任务处理GPS数据
+    xSemaphoreGiveFromISR(xGPS_DataReady,&xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
 /* USER CODE END 4 */
 
 /**
@@ -257,7 +299,7 @@ void Error_Handler(void)
 
   while (1)
   {
-    /*啥也不干，等狗咬*/
+    /*ĺĽäšä¸ĺš˛ďźç­çĺŹ*/
   }
   /* USER CODE END Error_Handler_Debug */
 }
