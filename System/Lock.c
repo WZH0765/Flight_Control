@@ -19,7 +19,6 @@ void Lock_Init(void)
     HW_LockState.IMU_Unlock      = 0;
     HW_LockState.GPS_Unlock      = 0;
     HW_LockState.Baro_Unlock     = 0;
-    HW_LockState.Receiver_Unlock = 0;
 }
 
 void Disable(void)
@@ -107,9 +106,17 @@ void Lock_Update(void)
 
 uint8_t HW_Unlock(void)
 {
-    if(HW_LockState.IMU_Unlock && HW_LockState.Receiver_Unlock)
+    TickType_t xCurrentTime = xTaskGetTickCount();
+
+    if(HW_LockState.IMU_Unlock == 0) return 0;
+    //添加
+
+    if((xCurrentTime - RC_DATA.TimeStamp) < pdMS_TO_TICKS(500))
     {
         return 1;
     }
-    return 0;
+    else
+    {
+        return 0;
+    }
 }

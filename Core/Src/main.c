@@ -33,6 +33,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "FreeRTOS.h"
+#include "Receiver.h"
 #include "semphr.h"
 #include "Filter.h"
 #include "Config.h"
@@ -67,7 +68,7 @@ extern SemaphoreHandle_t xRC_DataReady;      //RC ć°ćŽĺ°ąçťŞäżĄ
 
 /* USER CODE BEGIN PV */
 
-uint8_t GPS_RxBuffer[100] = {0};   //GPS DMA接收缓冲
+uint8_t GPS_RxBuffer[256] = {0};   //GPS DMA接收缓冲
 
 volatile uint16_t GPS_RxLength = 0;              //GPS本次接收长度
 
@@ -130,6 +131,7 @@ int main(void)
   GPS_Init();
   PID_Init();
   Lock_Init();
+  Receiver_Init();
   Filter_Init(0.5f,0.01f);
 
   if(Log_Status.Ready)

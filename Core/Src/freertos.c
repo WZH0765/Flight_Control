@@ -78,9 +78,10 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* USER CODE BEGIN Variables */
 
 static uint16_t Imu_Timeout = 0;
+static uint16_t Gps_Timeout = 0;
 
 /* main.c中GPS DMA接收缓冲及其长度 */
-extern uint8_t  GPS_RxBuffer[100];
+extern uint8_t  GPS_RxBuffer[256];
 extern volatile uint16_t GPS_RxLength;
 
 /* USER CODE END Variables */
@@ -298,14 +299,27 @@ void Sen_Read(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdFALSE)
+    if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
     {
+      //成功接收到数据
+      Gps_Timeout = 0;
+      Giveup_Code.GPS_Giveup = 0;
+      HW_LockState.GPS_Unlock = 1;
+
       //GPS数据处理
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
 
       //重启空闲中断
       HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
       __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);
+    }
+    else
+    {
+      Gps_Timeout ++;
+      if(Gps_Timeout > 10)                 //5秒无数据
+      {
+        Error_Code.GPS_Timeout_Error = 1;
+      }
     }
 
     osDelay(1);
@@ -328,7 +342,6 @@ void Pos_Estimate(void *argument)
 
   gps_data_t GpsData;
 
-  /* GPS解析器初始化 */
   GPS_Init();
 
   /* Infinite loop */
@@ -525,11 +538,8 @@ void Rc_Parse(void *argument)
   /* USER CODE BEGIN Rc_Parse */
 
   (void)argument;
-  Receiver_Init();
 
   uint8_t RcCopy[36] = {0};
-
-  static uint8_t  First_Receive = 1;     //首次收到数据标志
 
   /* Infinite loop */
   for(;;)
@@ -551,13 +561,6 @@ void Rc_Parse(void *argument)
 
       //重启DMA接收
       Receiver_Init();
-
-      //首次收到有效数据,标记接收机就�?
-      if(First_Receive != 0)
-      {
-        First_Receive = 0;
-        HW_LockState.Receiver_Unlock = 1;
-      }
     }
   }
   /* USER CODE END Rc_Parse */
@@ -631,21 +634,54 @@ void Sys_Observe(void *argument)
     /*IMU超时错误,尝试重启*/
     if(Error_Code.IMU_Timeout_Error == 1)
     {
-      IMU_Init();   //尝试重启
+      static uint16_t cnt = 0;
 
-      if(HW_LockState.IMU_Unlock == 1) 
+      if((++ cnt)%500 == 0)
       {
-        Error_Code.IMU_Timeout_Error = 0;
-        vTaskResume(Task_Att_CtrlHandle);
-        Imu_Timeout = 0;
-      }
-      else
-      {
-        //多次失败则停�???
-        static uint8_t cnt = 0;
-        if((++ cnt) > 3) 
+        IMU_Init();   //尝试重启
+
+        if(HW_LockState.IMU_Unlock == 1) 
         {
-          Error_Handler();
+          cnt = 0;
+          Imu_Timeout = 0;
+          Error_Code.IMU_Timeout_Error = 0;
+          vTaskResume(Task_Att_CtrlHandle);
+        }
+        else
+        {
+          //多次失败则停�???
+          if((cnt/500) > 3)
+          {
+            Error_Handler();
+          }
+        }
+      }
+    }
+
+    /*GPS超时错误，尝试重启*/
+    if(Error_Code.GPS_Timeout_Error == 1 && Giveup_Code.GPS_Giveup == 0)
+    {
+      static uint16_t cnt = 0;
+
+      if((++ cnt)%1000 == 0)
+      {
+        HAL_UART_DeInit(&huart3);
+        MX_USART3_UART_Init();
+        HAL_UARTEx_ReceiveToIdle_DMA(&huart3, GPS_RxBuffer, sizeof(GPS_RxBuffer));
+        __HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
+
+        if(HW_LockState.GPS_Unlock == 1)
+        {
+          cnt = 0;
+          Gps_Timeout = 0;
+          Error_Code.GPS_Timeout_Error = 0;
+        }
+        else
+        {
+          if((cnt/1000) > 3)
+          {
+            Giveup_Code.GPS_Giveup = 1;
+          }
         }
       }
     }

@@ -10,13 +10,14 @@ typedef struct
     uint8_t GPS_Unlock      : 1;
     uint8_t IMU_Unlock      : 1;
     uint8_t Baro_Unlock     : 1;
-    uint8_t Receiver_Unlock : 1;
+
 } HW_Lock_t;
 
 /*系统锁状态*/
 typedef struct
 {
-    uint16_t BeepCnt;       // 蜂鸣相位
+    uint16_t BeepCnt;       //蜂鸣相位
+    
     uint8_t Locking;        //1 蜂鸣进行中/正在上锁
     uint8_t LockState;      //0 允许电机运行/1 禁止电机运行
 

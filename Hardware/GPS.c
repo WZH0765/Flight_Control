@@ -6,7 +6,6 @@
 #include "task.h"
 #include "GPS.h"
 
-uint8_t Data_Flag   = 0;
 gps_data_t GPS_DATA = {0};
 
 extern QueueHandle_t xGPS_DataQ;
@@ -52,22 +51,19 @@ static void GPS_ParseLine(const char *line)
 
             if(rmc.valid == true)
             {
-                GPS_DATA.Fix = GPS_FIX_2D;
                 GPS_DATA.Latitude  	  = minmea_tocoord(&rmc.latitude);
                 GPS_DATA.Longitude 	  = minmea_tocoord(&rmc.longitude);
-                GPS_DATA.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514444f;   //节 -> m/s
+                GPS_DATA.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514f;   //节 -> m/s
                 GPS_DATA.GroundCourse = minmea_tofloat(&rmc.course);
             }
             else
             {
-                GPS_DATA.Fix = GPS_FIX_INVALID;
                 GPS_DATA.Latitude     = 0.0;
                 GPS_DATA.Longitude    = 0.0;
                 GPS_DATA.GroundSpeed  = 0.0f;
                 GPS_DATA.GroundCourse = 0.0f;
             }
             GPS_DATA.TimeStamp = xTaskGetTickCount();
-            Data_Flag = 1;
         }
         break;
 
@@ -90,7 +86,8 @@ static void GPS_ParseLine(const char *line)
                 GPS_DATA.Longitude = 0.0;
             }
             GPS_DATA.TimeStamp = xTaskGetTickCount();
-            Data_Flag = 1;
+        //直接写入队列
+        xQueueOverwrite(xGPS_DataQ, &GPS_DATA);
         }
         break;
 
@@ -135,11 +132,5 @@ void GPS_Parse(uint8_t *buffer,uint16_t len)
         {
             break;
         }
-    }
-
-    if(Data_Flag == 1)
-    {
-        Data_Flag = 0;
-        xQueueOverwrite(xGPS_DataQ,&GPS_DATA);
     }
 }
