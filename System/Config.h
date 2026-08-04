@@ -13,6 +13,21 @@
 #define PITCH_SCALE 45.00f/100.0f
 /*****IMU define END*****/
 
+/****MAG define BEGIN****/
+#define MAG_ID         0x10
+#define MAG_ADDR       0x0E
+
+#define MAG_ID_REG     0x00
+#define MAG_STAT_REG   0x02
+#define MAG_CTRL_REG   0x0A
+
+#define MAG_DATA_L     0x03
+#define MAG_CTRL_SRST  0x04
+#define MAG_CTRL_MODE  0x10
+
+#define MAG_SCALE   0.3f
+/*****MAG define END*****/
+
 /*CONTROL_TASK define BEGIN*/
 #define PWM_MIN     900
 #define PWM_MAX     2000

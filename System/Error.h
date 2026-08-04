@@ -1,6 +1,7 @@
 #ifndef _ERROR_H_
 #define _ERROR_H_
 
+#include "usart.h"
 #include <stdint.h>
 
 /*
@@ -9,6 +10,9 @@
 */
 typedef struct
 {
+    //RC
+    uint8_t RC_Timeout_Error;   //超时错误
+
     //IMU
     uint8_t IMU_ReadID_Error;   //读ID错误
     uint8_t IMU_Config_Error;   //配置错误
@@ -21,9 +25,6 @@ typedef struct
     uint8_t LOG_Open_Error;     //打开错误
     uint8_t LOG_Mount_Error;    //挂载错误
     uint8_t LOG_Write_Error;    //写入错误
-
-    //RC
-    uint8_t RC_Config_Error;
 
 } error_t;
 
@@ -43,5 +44,7 @@ typedef struct
 
 extern error_t Error_Code;
 extern giveup_t Giveup_Code;
+
+void Reset_USART(UART_HandleTypeDef *huart);
 
 #endif

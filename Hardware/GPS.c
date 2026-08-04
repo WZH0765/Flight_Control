@@ -3,6 +3,7 @@
 #include <string.h>
 #include "minmea.h"
 #include "queue.h"
+#include "usart.h"
 #include "task.h"
 #include "GPS.h"
 
@@ -26,6 +27,9 @@ void GPS_Init(void)
 
     GPS_DATA.GroundSpeed  = 0;
     GPS_DATA.GroundCourse = 0;
+
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
+    __HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
 }
 
 /*

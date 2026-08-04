@@ -7,8 +7,6 @@
 #include "semphr.h"
 #include "stm32h7xx.h"
 
-#define MAX_FRAME_SIZE 36									// 空闲中断接收的最大帧长
-
 /*
 	地址 + 数据长度 + 帧类型 +  数据 + CRC校验码
 */
@@ -103,9 +101,8 @@ typedef struct
 } rc_data_t;
 
 void Receiver_Init(void);
-void Process_CRSF_Data(uint8_t *Input,uint16_t size,rc_data_t *Output);
+void CRSF_Parse(uint8_t *Input,uint16_t size,rc_data_t *Output);
 
-extern uint8_t Rx_Buffer[36];
 extern rc_data_t RC_DATA;
 extern SemaphoreHandle_t xRC_DataReady;
 extern QueueHandle_t     xRC_DataQ;

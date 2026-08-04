@@ -42,6 +42,7 @@
 #include "Lock.h"
 #include "PID.h"
 #include "IMU.h"
+#include "MAG.h"
 #include "GPS.h"
 #include "Log.h"
 
@@ -69,9 +70,11 @@ extern SemaphoreHandle_t xRC_DataReady;      //RC ć°ćŽĺ°ąçťŞäżĄ
 
 /* USER CODE BEGIN PV */
 
-uint8_t GPS_RxBuffer[256] = {0};   //GPS DMA接收缓冲
+uint8_t RC_RxBuffer[36]   = {0};      //RC  DMA接收缓冲
+uint8_t GPS_RxBuffer[256] = {0};      //GPS DMA接收缓冲
 
-volatile uint16_t GPS_RxLength = 0;              //GPS本次接收长度
+volatile uint16_t RC_RxLength  = 0;   //RC 本次接收长度
+volatile uint16_t GPS_RxLength = 0;   //GPS本次接收长度
 
 /* USER CODE END PV */
 
@@ -130,6 +133,7 @@ int main(void)
 
   Log_Init();
   IMU_Init();
+  MAG_Init();
   GPS_Init();
   PID_Init();
   Lock_Init();
@@ -141,16 +145,11 @@ int main(void)
     Log_Open();
   }
 
-  /*ĺŻĺ¨TIM8 PWMčžĺş*/
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
   __HAL_TIM_MOE_ENABLE(&htim1);
-
-  /*启动GPS串口3空闲中断DMA接收*/
-  HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
-  __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);   //禁用半传输中�?
 
   /* USER CODE END 2 */
 
@@ -246,9 +245,10 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	/*ä¸˛ĺŁ2çŠşé˛*/
 	if(huart == &huart2)
 	{
+    RC_RxLength = Size;
+
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
-    //ĺ¤éRC_ParseäťťĺĄ
     xSemaphoreGiveFromISR(xRC_DataReady,&xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
@@ -257,7 +257,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 		GPS_RxLength = Size;
 
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    //唤醒Sen_Read任务处理GPS数据
+
     xSemaphoreGiveFromISR(xGPS_DataReady,&xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}

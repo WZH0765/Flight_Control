@@ -1,8 +1,6 @@
 #include "Receiver.h"
 #include "usart.h"
-
-/*接收缓冲区*/
-uint8_t Rx_Buffer[36] = {0};
+#include "main.h"
 
 rc_data_t RC_DATA;
 
@@ -98,11 +96,11 @@ float float_Map_with_median(float input_value, float input_min, float input_max,
 */
 void Receiver_Init(void)
 {
-	HAL_UARTEx_ReceiveToIdle_DMA(&huart2,Rx_Buffer,MAX_FRAME_SIZE);
+	HAL_UARTEx_ReceiveToIdle_DMA(&huart2,RC_RxBuffer,sizeof(RC_RxBuffer));
 	__HAL_DMA_DISABLE_IT(&hdma_usart2_rx,DMA_IT_HT);
 }
 
-void Process_CRSF_Data(uint8_t *Input,uint16_t size,rc_data_t *Output)
+void CRSF_Parse(uint8_t *Input,uint16_t size,rc_data_t *Output)
 {
 	if(size <= 5 || Input[0] != CRSF_ADDRESS_FLIGHT_CONTROLLER)return;
 	

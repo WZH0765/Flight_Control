@@ -42,6 +42,12 @@ extern "C" {
 /* Exported constants --------------------------------------------------------*/
 /* USER CODE BEGIN EC */
 
+extern uint8_t RC_RxBuffer[36]  ;
+extern uint8_t GPS_RxBuffer[256];
+
+extern volatile uint16_t RC_RxLength ;
+extern volatile uint16_t GPS_RxLength;
+
 /* USER CODE END EC */
 
 /* Exported macro ------------------------------------------------------------*/

@@ -13,7 +13,7 @@
 #define MAX_LEN 96
 
 /*底层写入函数*/
-int IMU_WriteReg(uint8_t reg,const uint8_t *buf,uint32_t len)
+static int IMU_WriteReg(uint8_t reg,const uint8_t *buf,uint32_t len)
 {
 	if(len > MAX_LEN) return -1;
 	
@@ -28,7 +28,7 @@ int IMU_WriteReg(uint8_t reg,const uint8_t *buf,uint32_t len)
 }
 
 /*底层读取函数*/
-int IMU_ReadReg(uint8_t reg,uint8_t *buf,uint32_t len)
+static int IMU_ReadReg(uint8_t reg,uint8_t *buf,uint32_t len)
 {
 	if(len > MAX_LEN) return -1;
 	
@@ -49,7 +49,7 @@ int IMU_ReadReg(uint8_t reg,uint8_t *buf,uint32_t len)
 }
 
 /*底层休眠函数*/
-void IMU_Sleep(uint32_t us)
+static void IMU_Sleep(uint32_t us)
 {
 	volatile uint32_t count = us*(SystemCoreClock/1000000)/10;
 	while(count--)
