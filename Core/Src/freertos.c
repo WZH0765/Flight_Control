@@ -19,7 +19,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
-#include "cmsis_os2.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -51,9 +50,9 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-SemaphoreHandle_t xGPS_DataReady;     //GPS数据就绪信号�???
-SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪信号�???
-SemaphoreHandle_t xRC_DataReady;      //RC 数据就绪信号�???
+SemaphoreHandle_t xGPS_DataReady;     //GPS数据就绪信号�????
+SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪信号�????
+SemaphoreHandle_t xRC_DataReady;      //RC 数据就绪信号�????
 
 QueueHandle_t     xLOG_DataQ;         //LOG数据队列
 QueueHandle_t     xGPS_DataQ;         //GPS数据队列
@@ -168,7 +167,7 @@ void MX_FREERTOS_Init(void) {
 
   xRC_DataReady  = xSemaphoreCreateBinary();                   //状�?�信号量
   xIMU_DataReady = xSemaphoreCreateBinary();                   //状�?�信号量
-  xGPS_DataReady = xSemaphoreCreateBinary();                   //GPS就绪信号�???
+  xGPS_DataReady = xSemaphoreCreateBinary();                   //GPS就绪信号�????
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -241,10 +240,10 @@ void Imu_Read(void *argument)
     //等待FIFO水位中断信号
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);
 
-    //获取FIFO字节�??
+    //获取FIFO字节�???
     inv_imu_get_frame_count(&IMU,&Cnt);
 
-    //字节数换算为帧数(48/16=3�??)
+    //字节数换算为帧数(48/16=3�???)
     Cnt = Cnt/16;
 
     //帧数异常则清空FIFO
@@ -254,7 +253,7 @@ void Imu_Read(void *argument)
       continue;
     }
 
-    //逐帧累加取均�??
+    //逐帧累加取均�???
     for(int i = 0;i < Cnt;i ++)
     {
       inv_imu_get_fifo_frame(&IMU,&FIFO_Data);
@@ -301,7 +300,7 @@ void Sen_Read(void *argument)
   {
     if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
     {
-      //成功接收到数据
+      //成功接收到数�?
       Gps_Timeout = 0;
       Giveup_Code.GPS_Giveup = 0;
       HW_LockState.GPS_Unlock = 1;
@@ -347,10 +346,10 @@ void Pos_Estimate(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    //轮询GPS队列取最新数据(无数据即超时跳过)
+    //轮询GPS队列取最新数�?(无数据即超时跳过)
     if(xQueueReceive(xGPS_DataQ,&GpsData,pdMS_TO_TICKS(200)) == pdTRUE)
     {
-      //TODO: 根据GpsData做位置估计(GPS+IMU融合)
+      //TODO: 根据GpsData做位置估�?(GPS+IMU融合)
     }
   }
   /* USER CODE END Pos_Estimate */
@@ -386,7 +385,7 @@ void Att_Control(void *argument)
     /**获取IMU数据**/
     if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)
     {
-      //接收成功,清超时计�???
+      //接收成功,清超时计�????
       Imu_Timeout = 0;
 
       //原始数据缩放为物理量
@@ -398,7 +397,7 @@ void Att_Control(void *argument)
       ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
       ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
 
-      //姿�?�解�???
+      //姿�?�解�????
       Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
       /*获取RC数据并校验时效�??(<200ms)*/
@@ -411,7 +410,7 @@ void Att_Control(void *argument)
           .Right_X  = RcData.Right_X,
           .Throttle = RcData.Left_Y/100.0f
         };
-        //解锁手势�???�???
+        //解锁手势�????�????
         Lock_Detect(gesture);
 
         //更新锁定/蜂鸣状�??
@@ -424,14 +423,14 @@ void Att_Control(void *argument)
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
         }
-        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�???
+        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�????
         {
           //蜂鸣期间由Lock_Update内部处理
         }
         else    //电机使能且未蜂鸣
         {
           /***解锁状�??: 执行PID+混控输出***/
-          //RC摇杆映射为角�???/角�?�度目标
+          //RC摇杆映射为角�????/角�?�度目标
           float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
           float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
           float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
@@ -447,15 +446,15 @@ void Att_Control(void *argument)
 
           /***内环:角�?�度PID,输出混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
-          PID_Rate_Roll.Actual    = ImuData.Gx;          //�???螺仪X=滚转速度(rad/s)
+          PID_Rate_Roll.Actual    = ImuData.Gx;          //�????螺仪X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
           PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�???螺仪Y=俯仰速度(rad/s)
+          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�????螺仪Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
           PID_Rate_Yaw.Target     = Yaw_Target;
-          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�???螺仪Z=偏航速度(rad/s)
+          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�????螺仪Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
           //油门归一化到0~1
@@ -463,7 +462,7 @@ void Att_Control(void *argument)
           if(Throttle < 0.0f) Throttle = 0.0f;
           if(Throttle > 1.0f) Throttle = 1.0f;
 
-          /**X型四轴混�???**/
+          /**X型四轴混�????**/
           //基准PWM与修正系数随油门变化
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
@@ -488,13 +487,13 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁定最低脉�???
+        //无有效RC数据则电机锁定最低脉�????
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //清零内外环积�???,防止积分饱和
+        //清零内外环积�????,防止积分饱和
         PID_Rate_Yaw.ErrorInt    = 0.0f;
         PID_Rate_Roll.ErrorInt   = 0.0f;
         PID_Rate_Pitch.ErrorInt  = 0.0f;
@@ -507,7 +506,7 @@ void Att_Control(void *argument)
     {
       Imu_Timeout ++;
 
-      //超时500ms则停机挂�???
+      //超时500ms则停机挂�????
       if(Imu_Timeout > 500)
       {
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
@@ -515,7 +514,7 @@ void Att_Control(void *argument)
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //上报超时错误并挂�???,由Sys_Observe恢复
+        //上报超时错误并挂�????,由Sys_Observe恢复
         Error_Code.IMU_Timeout_Error = 1;
 
         vTaskSuspend(NULL);
@@ -587,7 +586,7 @@ void Log_Write(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    //从日志队列取数据写盘,超时则继�???
+    //从日志队列取数据写盘,超时则继�????
     if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(100)) == pdTRUE)
     {
       Log_Save(&LogData);
@@ -595,7 +594,7 @@ void Log_Write(void *argument)
 
     xCurrentTime = xTaskGetTickCount();
 
-    //�???5秒同步一次文�???,防断电丢数据
+    //�????5秒同步一次文�????,防断电丢数据
     if(xCurrentTime - xLastSyncTime >= pdMS_TO_TICKS(5000))
     {
       Log_Sync();
@@ -649,7 +648,7 @@ void Sys_Observe(void *argument)
         }
         else
         {
-          //多次失败则停�???
+          //多次失败则停�????
           if((cnt/500) > 3)
           {
             Error_Handler();
@@ -658,7 +657,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*GPS超时错误，尝试重启*/
+    /*GPS超时错误，尝试重�?*/
     if(Error_Code.GPS_Timeout_Error == 1 && Giveup_Code.GPS_Giveup == 0)
     {
       static uint16_t cnt = 0;
@@ -686,7 +685,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD挂载错误:�???500ms重试�???次挂�???*/
+    /*SD挂载错误:�????500ms重试�????次挂�????*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;
@@ -716,7 +715,7 @@ void Sys_Observe(void *argument)
         }
       }
     }
-    /*日志打开错误:�???50ms重试�???次打�???*/
+    /*日志打开错误:�????50ms重试�????次打�????*/
     if(Error_Code.LOG_Open_Error == 1 && Giveup_Code.LOG_Open_Giveup == 0)
     {
       static uint16_t cnt = 0;
@@ -729,13 +728,13 @@ void Sys_Observe(void *argument)
           Error_Code.LOG_Open_Error = 0;
           Giveup_Code.LOG_Open_Giveup = 0;
         }
-        else if(cnt/50 > 150)   //尝试150�???
+        else if(cnt/50 > 150)   //尝试150�????
         {
           Giveup_Code.LOG_Open_Giveup = 1;
         }
       }
     }
-    /*日志写入错误:�???50ms重试重开文件*/
+    /*日志写入错误:�????50ms重试重开文件*/
     if(Error_Code.LOG_Write_Error == 1 && Giveup_Code.LOG_Write_Giveup == 0)
     {
       static uint16_t cnt = 0;

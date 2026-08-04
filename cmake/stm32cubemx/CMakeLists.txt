@@ -31,6 +31,7 @@ target_sources(stm32cubemx INTERFACE
     ../../Core/Src/gpio.c
     ../../Core/Src/freertos.c
     ../../Core/Src/dma.c
+    ../../Core/Src/i2c.c
     ../../Core/Src/iwdg.c
     ../../Core/Src/memorymap.c
     ../../Core/Src/sdmmc.c

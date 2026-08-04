@@ -21,6 +21,7 @@
 #include "cmsis_os.h"
 #include "dma.h"
 #include "fatfs.h"
+#include "i2c.h"
 #include "iwdg.h"
 #include "memorymap.h"
 #include "sdmmc.h"
@@ -124,6 +125,7 @@ int main(void)
   MX_FATFS_Init();
   MX_USART1_UART_Init();
   MX_USART3_UART_Init();
+  MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
   Log_Init();
@@ -148,7 +150,7 @@ int main(void)
 
   /*启动GPS串口3空闲中断DMA接收*/
   HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
-  __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);   //禁用半传输中断
+  __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);   //禁用半传输中�?
 
   /* USER CODE END 2 */
 
