@@ -228,6 +228,8 @@ void Imu_Read(void *argument)
   (void)argument;
 
   uint16_t Cnt = 0;
+  
+  imu_raw_t ImuRaw;
 
   /* Infinite loop */
   for(;;)
@@ -264,16 +266,16 @@ void Imu_Read(void *argument)
     }
 
     //更新原数据
-    IMU_RAW.Acc[0] = AccSum[0]/Cnt;
-    IMU_RAW.Acc[1] = AccSum[1]/Cnt;
-    IMU_RAW.Acc[2] = AccSum[2]/Cnt;
+    ImuRaw.Acc[0] = AccSum[0]/Cnt;
+    ImuRaw.Acc[1] = AccSum[1]/Cnt;
+    ImuRaw.Acc[2] = AccSum[2]/Cnt;
 
-    IMU_RAW.Gyro[0] = GyroSum[0]/Cnt;
-    IMU_RAW.Gyro[1] = GyroSum[1]/Cnt;
-    IMU_RAW.Gyro[2] = GyroSum[2]/Cnt;
+    ImuRaw.Gyro[0] = GyroSum[0]/Cnt;
+    ImuRaw.Gyro[1] = GyroSum[1]/Cnt;
+    ImuRaw.Gyro[2] = GyroSum[2]/Cnt;
 
     //覆写新数据
-    xQueueOverwrite(xIMU_DataQ,&IMU_RAW);
+    xQueueOverwrite(xIMU_DataQ,&ImuRaw);
   }
   /* USER CODE END Imu_Read */
 }
@@ -387,7 +389,6 @@ void Att_Control(void *argument)
       ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
       ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
 
-      //姿�?�解�????
       Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
       /*获取RC数据并校验时效*/
@@ -400,10 +401,10 @@ void Att_Control(void *argument)
           .Right_X  = RcData.Right_X,
           .Throttle = RcData.Left_Y/100.0f
         };
-        //解锁手势�????�????
+        //解锁手势
         Lock_Detect(gesture);
 
-        //更新锁定/蜂鸣状�??
+        //更新锁定
         Lock_Update();
 
         if(Sys_LockState.LockState == 1)    //电机失能
@@ -413,19 +414,19 @@ void Att_Control(void *argument)
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
         }
-        else if(Sys_LockState.Locking == 1)   //蜂鸣进行�????
+        else if(Sys_LockState.Locking == 1)   //蜂鸣进行
         {
           //蜂鸣期间由Lock_Update内部处理
         }
         else    //电机使能且未蜂鸣
         {
-          /***解锁状�??: 执行PID+混控输出***/
-          //RC摇杆映射为角�????/角�?�度目标
+          /***解锁:执行PID+混控输出***/
+          //RC摇杆映射
           float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
           float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
           float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
 
-          /***外环:角度PID,输出角�?�度目标***/
+          /***外环:角度PID,输出角速度目标***/
           PID_Angle_Roll.Target   = Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -434,17 +435,17 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角�?�度PID,输出混控指令***/
+          /***内环:角速度PID,输出混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
-          PID_Rate_Roll.Actual    = ImuData.Gx;          //�????螺仪X=滚转速度(rad/s)
+          PID_Rate_Roll.Actual    = ImuData.Gx;          //X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
 
           PID_Rate_Pitch.Target   = Rate_Pitch_Target;
-          PID_Rate_Pitch.Actual   = ImuData.Gy;          //�????螺仪Y=俯仰速度(rad/s)
+          PID_Rate_Pitch.Actual   = ImuData.Gy;          //Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
           PID_Rate_Yaw.Target     = Yaw_Target;
-          PID_Rate_Yaw.Actual     = ImuData.Gz;          //�????螺仪Z=偏航速度(rad/s)
+          PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
           //油门归一化到0~1
@@ -452,7 +453,7 @@ void Att_Control(void *argument)
           if(Throttle < 0.0f) Throttle = 0.0f;
           if(Throttle > 1.0f) Throttle = 1.0f;
 
-          /**X型四轴混�????**/
+          /**X型四轴**/
           //基准PWM与修正系数随油门变化
           float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*Throttle*PWM_RANGE;
@@ -477,13 +478,13 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁定最低脉�????
+        //无有效RC数据则电机锁定最低
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //清零内外环积�????,防止积分饱和
+        //清零内外环,防止积分饱和
         PID_Rate_Yaw.ErrorInt    = 0.0f;
         PID_Rate_Roll.ErrorInt   = 0.0f;
         PID_Rate_Pitch.ErrorInt  = 0.0f;
@@ -552,6 +553,7 @@ void Rc_Parse(void *argument)
 
       if(Rc_Timeout > 5)
       {
+        //上报超时错误
         Error_Code.RC_Timeout_Error = 1;
       }
     }

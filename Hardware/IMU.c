@@ -58,11 +58,6 @@ static void IMU_Sleep(uint32_t us)
 	}
 }
 
-/*结构体定义 BEGIN*/
-imu_raw_t  IMU_RAW;
-imu_data_t IMU_DATA;
-/**结构体定义 END**/
-
 inv_imu_device_t IMU = {0};
 inv_imu_fifo_data_t FIFO_Data;		//IMU原始数据
 

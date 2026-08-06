@@ -29,9 +29,6 @@ typedef struct
 
 } imu_raw_t;
 
-extern imu_raw_t  IMU_RAW;
-extern imu_data_t IMU_DATA;
-
 extern inv_imu_device_t IMU;
 extern inv_imu_fifo_data_t FIFO_Data;
 /*DATA PROCESSED END*/
