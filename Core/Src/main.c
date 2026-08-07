@@ -131,8 +131,8 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-  Log_Init();
-  IMU_Init();
+  //Log_Init();
+  //IMU_Init();
   MAG_Init();
   GPS_Init();
   PID_Init();
@@ -236,13 +236,8 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-/*
-	ä¸ä¸ĺ¸§ć°ćŽćĽćśĺŽćďźä¸ä¸ĺ¸§ć°ćŽčżćŞĺ°ć?
-	č°ç¨ć­¤ĺ˝ć°ďźĺ¤çć°ćŽ
-*/
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
-	/*ä¸˛ĺŁ2çŠşé˛*/
 	if(huart == &huart2)
 	{
     RC_RxLength = Size;
@@ -255,6 +250,7 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
   if(huart == &huart3)
 	{
 		GPS_RxLength = Size;
+    HW_LockState.GPS_Unlock = 1;
 
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 

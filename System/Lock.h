@@ -6,10 +6,10 @@
 /*硬件锁状态*/
 typedef struct
 {
-    uint8_t SD_Unlock       : 1;
-    uint8_t GPS_Unlock      : 1;
-    uint8_t IMU_Unlock      : 1;
-    uint8_t Baro_Unlock     : 1;
+    uint8_t SD_Unlock;
+    uint8_t GPS_Unlock;
+    uint8_t IMU_Unlock;
+    uint8_t Baro_Unlock;
 
 } HW_Lock_t;
 

@@ -2,7 +2,8 @@
 #include "usart.h"
 #include "main.h"
 
-rc_data_t RC_DATA;
+//随时调用RC时间
+rc_data_t RcTime;
 
 /*
 	CRSF CRC8_DVB_S2 校验表
@@ -100,7 +101,7 @@ void Receiver_Init(void)
 	__HAL_DMA_DISABLE_IT(&hdma_usart2_rx,DMA_IT_HT);
 }
 
-void CRSF_Parse(uint8_t *Input,uint16_t size,rc_data_t *Output)
+void CRSF_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output)
 {
 	if(size <= 5 || Input[0] != CRSF_ADDRESS_FLIGHT_CONTROLLER)return;
 	

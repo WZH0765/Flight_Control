@@ -77,6 +77,8 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
+rc_raw_t  RcRaw  = {0};     //RC未处理数据
+
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Imu_Timeout = 0;
 static uint16_t Gps_Timeout = 0;
@@ -224,11 +226,10 @@ void MX_FREERTOS_Init(void) {
 void Imu_Read(void *argument)
 {
   /* USER CODE BEGIN Imu_Read */
-
   (void)argument;
 
   uint16_t Cnt = 0;
-  
+
   imu_raw_t ImuRaw;
 
   /* Infinite loop */
@@ -290,7 +291,6 @@ void Imu_Read(void *argument)
 void Sen_Read(void *argument)
 {
   /* USER CODE BEGIN Sen_Read */
-
   (void)argument;
 
   /* Infinite loop */
@@ -301,11 +301,8 @@ void Sen_Read(void *argument)
     {
       //接收到数据
       Gps_Timeout = 0;
-      HW_LockState.GPS_Unlock = 1;
-
       //数据去处理
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
-
       //重启空闲中断
       GPS_Init();
     }
@@ -341,7 +338,7 @@ void Pos_Estimate(void *argument)
   {
     if(xQueueReceive(xGPS_DataQ,&GpsData,pdMS_TO_TICKS(200)) == pdTRUE)
     {
-      //TODO: 根据GpsData做位置
+      
     }
   }
   /* USER CODE END Pos_Estimate */
@@ -394,19 +391,6 @@ void Att_Control(void *argument)
       /*获取RC数据并校验时效*/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
       {
-        //组装手势输入
-        Detect_Lock_t gesture =
-        {
-          .Left_X   = RcData.Left_X,
-          .Right_X  = RcData.Right_X,
-          .Throttle = RcData.Left_Y/100.0f
-        };
-        //解锁手势
-        Lock_Detect(gesture);
-
-        //更新锁定
-        Lock_Update();
-
         if(Sys_LockState.LockState == 1)    //电机失能
         {
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
@@ -420,18 +404,12 @@ void Att_Control(void *argument)
         }
         else    //电机使能且未蜂鸣
         {
-          /***解锁:执行PID+混控输出***/
-          //RC摇杆映射
-          float Yaw_Target   = RcData.Left_X *YAW_SCALE  *RAD;
-          float Roll_Target  = RcData.Right_X*ROLL_SCALE *RAD;
-          float Pitch_Target = RcData.Right_Y*PITCH_SCALE*RAD;
-
           /***外环:角度PID,输出角速度目标***/
-          PID_Angle_Roll.Target   = Roll_Target;
+          PID_Angle_Roll.Target   = RcData.Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
 
-          PID_Angle_Pitch.Target  = Pitch_Target;
+          PID_Angle_Pitch.Target  = RcData.Pitch_Target;
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
@@ -444,19 +422,14 @@ void Att_Control(void *argument)
           PID_Rate_Pitch.Actual   = ImuData.Gy;          //Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
-          PID_Rate_Yaw.Target     = Yaw_Target;
+          PID_Rate_Yaw.Target     = RcData.Yaw_Target;
           PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-          //油门归一化到0~1
-          float Throttle = RcData.Left_Y / 100.0f;
-          if(Throttle < 0.0f) Throttle = 0.0f;
-          if(Throttle > 1.0f) Throttle = 1.0f;
-
           /**X型四轴**/
           //基准PWM与修正系数随油门变化
-          float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
-          float BaseCorr = 0.5f*Throttle*PWM_RANGE;
+          float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
+          float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
 
           //四电机修正量
           float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
@@ -529,6 +502,8 @@ void Rc_Parse(void *argument)
 
   (void)argument;
 
+  rc_data_t RcData = {0};     //RC处理后数据
+
   /* Infinite loop */
   for(;;)
   {
@@ -537,12 +512,26 @@ void Rc_Parse(void *argument)
       Rc_Timeout = 0;
       Error_Code.RC_Timeout_Error = 0;
 
-      CRSF_Parse(RC_RxBuffer,RC_RxLength,&RC_DATA);
-      //记录时间戳供时效校验
-      RC_DATA.TimeStamp = xTaskGetTickCount();
+      CRSF_Parse(RC_RxBuffer,RC_RxLength,&RcRaw);
+
+      RcData.Throttle     = RcRaw.Left_Y/100.0f;
+      RcData.TimeStamp    = xTaskGetTickCount();
+      RcData.Yaw_Target   = RcRaw.Left_X *YAW_SCALE  *RAD;
+      RcData.Roll_Target  = RcRaw.Right_X*ROLL_SCALE *RAD;
+      RcData.Pitch_Target = RcRaw.Right_Y*PITCH_SCALE*RAD;
+
+      Detect_Lock_t gesture =
+      {
+        .Left_X   = RcRaw.Left_X,
+        .Right_X  = RcRaw.Right_X,
+        .Throttle = RcRaw.Left_Y/100.0f
+      };
+
+      Lock_Detect(gesture);
+      Lock_Update();
 
       //覆盖写入队列
-      xQueueOverwrite(xRC_DataQ,&RC_DATA);
+      xQueueOverwrite(xRC_DataQ,&RcData);
 
       //重启DMA接收
       Receiver_Init();
@@ -756,7 +745,7 @@ void Sys_Observe(void *argument)
       }
     }
     
-    osDelay(1);
+    osDelay(10);
   }
   /* USER CODE END Sys_Observe */
 }

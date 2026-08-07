@@ -111,7 +111,7 @@ uint8_t HW_Unlock(void)
     if(HW_LockState.IMU_Unlock == 0) return 0;
     //添加
 
-    if((xCurrentTime - RC_DATA.TimeStamp) < pdMS_TO_TICKS(500))
+    if((xCurrentTime - RcTime.TimeStamp) < pdMS_TO_TICKS(500))
     {
         return 1;
     }

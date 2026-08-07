@@ -1,11 +1,10 @@
 #ifndef __RECEIVER_H__
 #define __RECEIVER_H__
 
-#include <stdint.h>
 #include "FreeRTOSConfig.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
-#include "stm32h7xx.h"
+#include <stdint.h>
 
 /*
 	地址 + 数据长度 + 帧类型 +  数据 + CRC校验码
@@ -50,6 +49,7 @@
 #define CRSF_FRAMETYPE_MSP_WRITE				0x7C		//以8字节分块二进制形式写入（OpenTX出站遥测缓冲区限制）
 /******************FRAMETYPE END******************/
 
+//所有数据
 typedef struct
 {
 /******RC_CHANNELS_PACKED RC_DATA BEGIN******/
@@ -71,8 +71,6 @@ typedef struct
 	uint8_t Lever_B;		//拨杆B
 	uint8_t Lever_C;		//拨杆C
 	uint8_t Lever_D;		//拨杆D
-
-	TickType_t TimeStamp;	//每帧数据时间戳
 	
 /*******RC_CHANNELS_PACKED RC_DATA END*******/
 
@@ -98,13 +96,27 @@ typedef struct
 	uint16_t HEARTBEAT_COUNTER;			// 心跳计数器
 /*********HEARTBEAT RC_DATA END*********/
 
+} rc_raw_t;
+
+//控制数据
+typedef struct
+{
+/******RC_CHANNELS_PACKED RC_DATA BEGIN******/
+	float Throttle;
+
+	float Yaw_Target;
+	float Roll_Target;
+	float Pitch_Target;
+
+	TickType_t TimeStamp;	//每帧数据时间戳
+	
+/*******RC_CHANNELS_PACKED RC_DATA END*******/
+
 } rc_data_t;
 
-void Receiver_Init(void);
-void CRSF_Parse(uint8_t *Input,uint16_t size,rc_data_t *Output);
+extern rc_data_t RcTime;
 
-extern rc_data_t RC_DATA;
-extern SemaphoreHandle_t xRC_DataReady;
-extern QueueHandle_t     xRC_DataQ;
+void Receiver_Init(void);
+void CRSF_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output);
 
 #endif

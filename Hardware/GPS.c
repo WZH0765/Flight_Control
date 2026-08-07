@@ -91,7 +91,7 @@ static void GPS_ParseLine(const char *line)
             }
             GPS_DATA.TimeStamp = xTaskGetTickCount();
         //直接写入队列
-        xQueueOverwrite(xGPS_DataQ, &GPS_DATA);
+        xQueueOverwrite(xGPS_DataQ,&GPS_DATA);
         }
         break;
 
