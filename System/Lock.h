@@ -9,6 +9,7 @@ typedef struct
     uint8_t SD_Unlock;
     uint8_t GPS_Unlock;
     uint8_t IMU_Unlock;
+    uint8_t MAG_Unlock;
     uint8_t Baro_Unlock;
 
 } HW_Lock_t;

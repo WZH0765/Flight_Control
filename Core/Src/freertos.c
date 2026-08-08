@@ -19,7 +19,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
-#include "projdefs.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -77,7 +76,7 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-rc_raw_t  RcRaw  = {0};     //RC未处理数据
+rc_raw_t  RcRaw  = {0};     //RC未处理数�?
 
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Imu_Timeout = 0;
@@ -167,7 +166,7 @@ void MX_FREERTOS_Init(void) {
 
   xRC_DataReady  = xSemaphoreCreateBinary();                   //状�?�信号量
   xIMU_DataReady = xSemaphoreCreateBinary();                   //状�?�信号量
-  xGPS_DataReady = xSemaphoreCreateBinary();                   //GPS就绪信号�????
+  xGPS_DataReady = xSemaphoreCreateBinary();                   //GPS就绪信号�?????
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -241,10 +240,10 @@ void Imu_Read(void *argument)
     //等待信号量（超时也等待）
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);
 
-    //获取字节数
+    //获取字节�?
     inv_imu_get_frame_count(&IMU,&Cnt);
 
-    //转换为帧数
+    //转换为帧�?
     Cnt = Cnt/16;
     if(Cnt < 3 || Cnt > 10)
     {
@@ -252,7 +251,7 @@ void Imu_Read(void *argument)
       continue;
     }
 
-    //累加取平均
+    //累加取平�?
     for(int i = 0;i < Cnt;i ++)
     {
       inv_imu_get_fifo_frame(&IMU,&FIFO_Data);
@@ -266,7 +265,7 @@ void Imu_Read(void *argument)
       GyroSum[2] += FIFO_Data.byte_16.gyro_data[2];
     }
 
-    //更新原数据
+    //更新原数�?
     ImuRaw.Acc[0] = AccSum[0]/Cnt;
     ImuRaw.Acc[1] = AccSum[1]/Cnt;
     ImuRaw.Acc[2] = AccSum[2]/Cnt;
@@ -275,7 +274,7 @@ void Imu_Read(void *argument)
     ImuRaw.Gyro[1] = GyroSum[1]/Cnt;
     ImuRaw.Gyro[2] = GyroSum[2]/Cnt;
 
-    //覆写新数据
+    //覆写新数�?
     xQueueOverwrite(xIMU_DataQ,&ImuRaw);
   }
   /* USER CODE END Imu_Read */
@@ -299,9 +298,9 @@ void Sen_Read(void *argument)
     //等待信号量（超时不等待）
     if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
     {
-      //接收到数据
+      //接收到数�?
       Gps_Timeout = 0;
-      //数据去处理
+      //数据去处�?
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
       //重启空闲中断
       GPS_Init();
@@ -388,7 +387,7 @@ void Att_Control(void *argument)
 
       Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
-      /*获取RC数据并校验时效*/
+      /*获取RC数据并校验时�?*/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
       {
         if(Sys_LockState.LockState == 1)    //电机失能
@@ -404,7 +403,7 @@ void Att_Control(void *argument)
         }
         else    //电机使能且未蜂鸣
         {
-          /***外环:角度PID,输出角速度目标***/
+          /***外环:角度PID,输出角�?�度目标***/
           PID_Angle_Roll.Target   = RcData.Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -413,7 +412,7 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角速度PID,输出混控指令***/
+          /***内环:角�?�度PID,输出混控指令***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
           PID_Rate_Roll.Actual    = ImuData.Gx;          //X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
@@ -426,7 +425,7 @@ void Att_Control(void *argument)
           PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-          /**X型四轴**/
+          /**X型四�?**/
           //基准PWM与修正系数随油门变化
           float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
@@ -451,13 +450,13 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁定最低
+        //无有效RC数据则电机锁定最�?
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //清零内外环,防止积分饱和
+        //清零内外�?,防止积分饱和
         PID_Rate_Yaw.ErrorInt    = 0.0f;
         PID_Rate_Roll.ErrorInt   = 0.0f;
         PID_Rate_Pitch.ErrorInt  = 0.0f;
@@ -470,7 +469,7 @@ void Att_Control(void *argument)
     {
       Imu_Timeout ++;
 
-      //超时500ms则停机
+      //超时500ms则停�?
       if(Imu_Timeout > 500)
       {
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
@@ -502,7 +501,7 @@ void Rc_Parse(void *argument)
 
   (void)argument;
 
-  rc_data_t RcData = {0};     //RC处理后数据
+  rc_data_t RcData = {0};     //RC处理后数�?
 
   /* Infinite loop */
   for(;;)
@@ -571,7 +570,7 @@ void Log_Write(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    //从日志队列取数据写
+    //从日志队列取数据�?
     if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(100)) == pdTRUE)
     {
       Log_Save(&LogData);
@@ -678,7 +677,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD卡挂载错误,尝试重启*/
+    /*SD卡挂载错�?,尝试重启*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;

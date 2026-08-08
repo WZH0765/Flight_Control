@@ -15,7 +15,6 @@
 
 /****MAG define BEGIN****/
 #define MAG_ID         0x10
-#define MAG_ADDR       0x0E
 
 #define MAG_ID_REG     0x00
 #define MAG_STAT_REG   0x02

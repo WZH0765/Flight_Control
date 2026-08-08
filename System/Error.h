@@ -18,6 +18,11 @@ typedef struct
     uint8_t IMU_Config_Error;   //配置错误
     uint8_t IMU_Timeout_Error;  //超时错误
 
+    //MAG
+    uint8_t MAG_ReadID_Error;   //读ID错误
+    uint8_t MAG_Config_Error;   //配置错误
+    uint8_t MAG_Timeout_Error;  //超时错误
+
     //GPS
     uint8_t GPS_Timeout_Error;  //超时错误
 

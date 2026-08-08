@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#define MAG_OK 0
+
 typedef struct
 {
     int16_t Mag[3];         // X/Y/Z 原始LSB
@@ -18,7 +20,7 @@ typedef struct
 extern mag_raw_t  MAG_RAW;
 extern mag_data_t MAG_DATA;
 
-int MAG_Init(void);
+void MAG_Init(void);
 int MAG_Read(void);
 
 #endif

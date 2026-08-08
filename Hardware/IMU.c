@@ -96,7 +96,7 @@ void IMU_Init(void)
 	status |= inv_imu_set_accel_frequency(&IMU,ACCEL_CONFIG0_ACCEL_ODR_3200_HZ);
 	status |= inv_imu_set_gyro_fsr(&IMU,GYRO_CONFIG0_AP_GYRO_FS_SEL_500_DPS);
 	status |= inv_imu_set_gyro_frequency(&IMU,GYRO_CONFIG0_GYRO_ODR_3200_HZ);
-	/*4g 500dps 3200Hz Config_END*/	
+	/*4g 500dps 3200Hz Config_END*/
 	
 	/*FIFO Config_BEGIN*/
 	inv_imu_fifo_config_t FIFO_Config = 
