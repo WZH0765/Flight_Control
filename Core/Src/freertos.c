@@ -33,17 +33,18 @@
 #include "semphr.h"
 #include "Filter.h"
 #include "Config.h"
+#include "usart.h"
 #include "Error.h"
 #include "fatfs.h"
 #include "iwdg.h"
 #include "Lock.h"
 #include "IMU.h"
+#include "MAG.h"
 #include "PID.h"
 #include "tim.h"
 #include "Log.h"
 #include "ff.h"
 #include "GPS.h"
-#include "usart.h"
 
 /* USER CODE END Includes */
 
@@ -52,11 +53,13 @@
 
 SemaphoreHandle_t xGPS_DataReady;     //GPS数据就绪信号
 SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪信号
+SemaphoreHandle_t xMAG_DataReady;     //MAG数据就绪信号
 SemaphoreHandle_t xRC_DataReady;      //RC 数据就绪信号
 
 QueueHandle_t     xLOG_DataQ;         //LOG数据队列
 QueueHandle_t     xGPS_DataQ;         //GPS数据队列
 QueueHandle_t     xIMU_DataQ;         //IMU数据队列
+QueueHandle_t     xMAG_DataQ;         //MAG数据队列
 QueueHandle_t     xRC_DataQ;          //RC 数据队列
 
 /* USER CODE END PTD */
@@ -76,10 +79,11 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-rc_raw_t  RcRaw  = {0};     //RC未处理数�?
+rc_raw_t RcRaw = {0};     //RC未处理数�??
 
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Imu_Timeout = 0;
+static uint16_t Mag_Timeout = 0;
 static uint16_t Gps_Timeout = 0;
 
 /* USER CODE END Variables */
@@ -164,9 +168,10 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
-  xRC_DataReady  = xSemaphoreCreateBinary();                   //状�?�信号量
-  xIMU_DataReady = xSemaphoreCreateBinary();                   //状�?�信号量
-  xGPS_DataReady = xSemaphoreCreateBinary();                   //GPS就绪信号�?????
+  xRC_DataReady  = xSemaphoreCreateBinary();
+  xIMU_DataReady = xSemaphoreCreateBinary();
+  xMAG_DataReady = xSemaphoreCreateBinary();
+  xGPS_DataReady = xSemaphoreCreateBinary();
 
   /* USER CODE END RTOS_SEMAPHORES */
 
@@ -178,8 +183,9 @@ void MX_FREERTOS_Init(void) {
 
   xRC_DataQ  = xQueueCreate(1,sizeof(rc_data_t));
   xIMU_DataQ = xQueueCreate(1,sizeof(imu_raw_t));
+  xMAG_DataQ = xQueueCreate(1,sizeof(mag_data_t));
   xGPS_DataQ = xQueueCreate(1,sizeof(gps_data_t));
-  xLOG_DataQ = xQueueCreate(LOG_QUEUE_LEN,sizeof(log_data_t));
+  xLOG_DataQ = xQueueCreate(256,sizeof(log_data_t));
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -227,23 +233,21 @@ void Imu_Read(void *argument)
   /* USER CODE BEGIN Imu_Read */
   (void)argument;
 
-  uint16_t Cnt = 0;
+  uint16_t  Cnt = 0;
+  imu_raw_t ImuRaw = {0};
 
-  imu_raw_t ImuRaw;
-
-  /* Infinite loop */
   for(;;)
   {
     int32_t AccSum[3]  = {0};
     int32_t GyroSum[3] = {0};
 
-    //等待信号量（超时也等待）
+    //等待信号�?
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);
 
-    //获取字节�?
+    //获取字节
     inv_imu_get_frame_count(&IMU,&Cnt);
 
-    //转换为帧�?
+    //转换为帧
     Cnt = Cnt/16;
     if(Cnt < 3 || Cnt > 10)
     {
@@ -251,7 +255,7 @@ void Imu_Read(void *argument)
       continue;
     }
 
-    //累加取平�?
+    //累加取平
     for(int i = 0;i < Cnt;i ++)
     {
       inv_imu_get_fifo_frame(&IMU,&FIFO_Data);
@@ -265,7 +269,7 @@ void Imu_Read(void *argument)
       GyroSum[2] += FIFO_Data.byte_16.gyro_data[2];
     }
 
-    //更新原数�?
+    //更新原数
     ImuRaw.Acc[0] = AccSum[0]/Cnt;
     ImuRaw.Acc[1] = AccSum[1]/Cnt;
     ImuRaw.Acc[2] = AccSum[2]/Cnt;
@@ -274,7 +278,7 @@ void Imu_Read(void *argument)
     ImuRaw.Gyro[1] = GyroSum[1]/Cnt;
     ImuRaw.Gyro[2] = GyroSum[2]/Cnt;
 
-    //覆写新数�?
+    //覆写新数
     xQueueOverwrite(xIMU_DataQ,&ImuRaw);
   }
   /* USER CODE END Imu_Read */
@@ -292,17 +296,13 @@ void Sen_Read(void *argument)
   /* USER CODE BEGIN Sen_Read */
   (void)argument;
 
-  /* Infinite loop */
   for(;;)
   {
-    //等待信号量（超时不等待）
+/***********GPS Data Read BEGIN***********/
     if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
     {
-      //接收到数�?
       Gps_Timeout = 0;
-      //数据去处�?
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
-      //重启空闲中断
       GPS_Init();
     }
     else
@@ -313,6 +313,13 @@ void Sen_Read(void *argument)
         Error_Code.GPS_Timeout_Error = 1;
       }
     }
+/************GPS Data Read END************/
+
+/***********MAG Data Read BEGIN***********/
+    // MagData.Mag[0] = (float)MagRaw.Mag[0]*MAG_SCALE;
+    // MagData.Mag[1] = (float)MagRaw.Mag[1]*MAG_SCALE;
+    // MagData.Mag[2] = (float)MagRaw.Mag[2]*MAG_SCALE;
+/************MAG Data Read END************/
   }
   /* USER CODE END Sen_Read */
 }
@@ -327,7 +334,6 @@ void Sen_Read(void *argument)
 void Pos_Estimate(void *argument)
 {
   /* USER CODE BEGIN Pos_Estimate */
-
   (void)argument;
 
   gps_data_t GpsData;
@@ -353,17 +359,15 @@ void Pos_Estimate(void *argument)
 void Att_Control(void *argument)
 {
   /* USER CODE BEGIN Att_Control */
-
   (void)argument;
 
-  rc_data_t  RcData  = {0};     //RC 数据
+  rc_data_t  RcData  = {0};     //RC 缩放数据
   imu_raw_t  ImuRaw  = {0};     //IMU原始数据
   imu_data_t ImuData = {0};     //IMU缩放数据
 
   TickType_t xCurrentTime;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //上次任务唤醒时刻
 
-  /* Infinite loop */
   for(;;)
   {
     //固定1KHz调度
@@ -387,7 +391,7 @@ void Att_Control(void *argument)
 
       Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
 
-      /*获取RC数据并校验时�?*/
+      /**获取RC数据**/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
       {
         if(Sys_LockState.LockState == 1)    //电机失能
@@ -399,11 +403,11 @@ void Att_Control(void *argument)
         }
         else if(Sys_LockState.Locking == 1)   //蜂鸣进行
         {
-          //蜂鸣期间由Lock_Update内部处理
+
         }
         else    //电机使能且未蜂鸣
         {
-          /***外环:角度PID,输出角�?�度目标***/
+          /***外环:角度PID***/
           PID_Angle_Roll.Target   = RcData.Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -412,7 +416,7 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角�?�度PID,输出混控指令***/
+          /***内环:角速度PID***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
           PID_Rate_Roll.Actual    = ImuData.Gx;          //X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
@@ -425,8 +429,7 @@ void Att_Control(void *argument)
           PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-          /**X型四�?**/
-          //基准PWM与修正系数随油门变化
+          //基准PWM与修正系数
           float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
 
@@ -441,7 +444,7 @@ void Att_Control(void *argument)
           uint16_t Pwm3 = (uint16_t)(BasePwm + M3_Corr);
           uint16_t Pwm4 = (uint16_t)(BasePwm + M4_Corr);
 
-          //限幅后输出到TIM1
+          //钳位输出
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,CLAMP(Pwm1,PWM_MIN,PWM_MAX));
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,CLAMP(Pwm2,PWM_MIN,PWM_MAX));
           __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,CLAMP(Pwm3,PWM_MIN,PWM_MAX));
@@ -450,13 +453,13 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁定最�?
+        //无有效RC数据则电机锁定
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 
-        //清零内外�?,防止积分饱和
+        //防止积分饱和
         PID_Rate_Yaw.ErrorInt    = 0.0f;
         PID_Rate_Roll.ErrorInt   = 0.0f;
         PID_Rate_Pitch.ErrorInt  = 0.0f;
@@ -467,10 +470,7 @@ void Att_Control(void *argument)
     }
     else /*IMU数据异常处理*/
     {
-      Imu_Timeout ++;
-
-      //超时500ms则停�?
-      if(Imu_Timeout > 500)
+      if((++ Imu_Timeout) > 500)
       {
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
@@ -479,7 +479,6 @@ void Att_Control(void *argument)
 
         //上报超时错误
         Error_Code.IMU_Timeout_Error = 1;
-
         vTaskSuspend(NULL);
       }
     }
@@ -498,12 +497,11 @@ void Att_Control(void *argument)
 void Rc_Parse(void *argument)
 {
   /* USER CODE BEGIN Rc_Parse */
-
   (void)argument;
 
-  rc_data_t RcData = {0};     //RC处理后数�?
+  rc_data_t  RcData  = {0};
+  ges_lock_t Gesture = {0};
 
-  /* Infinite loop */
   for(;;)
   {
     if(xSemaphoreTake(xRC_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
@@ -511,7 +509,7 @@ void Rc_Parse(void *argument)
       Rc_Timeout = 0;
       Error_Code.RC_Timeout_Error = 0;
 
-      CRSF_Parse(RC_RxBuffer,RC_RxLength,&RcRaw);
+      RC_Parse(RC_RxBuffer,RC_RxLength,&RcRaw);
 
       RcData.Throttle     = RcRaw.Left_Y/100.0f;
       RcData.TimeStamp    = xTaskGetTickCount();
@@ -519,27 +517,20 @@ void Rc_Parse(void *argument)
       RcData.Roll_Target  = RcRaw.Right_X*ROLL_SCALE *RAD;
       RcData.Pitch_Target = RcRaw.Right_Y*PITCH_SCALE*RAD;
 
-      Detect_Lock_t gesture =
-      {
-        .Left_X   = RcRaw.Left_X,
-        .Right_X  = RcRaw.Right_X,
-        .Throttle = RcRaw.Left_Y/100.0f
-      };
+      Gesture.Left_X      = RcRaw.Left_X;
+      Gesture.Right_X     = RcRaw.Right_X;
+      Gesture.Throttle    = RcRaw.Left_Y/100.0f;
 
-      Lock_Detect(gesture);
+      Lock_Detect(Gesture);
       Lock_Update();
 
       //覆盖写入队列
       xQueueOverwrite(xRC_DataQ,&RcData);
-
-      //重启DMA接收
-      Receiver_Init();
+      RC_Init();
     }
     else
     {
-      Rc_Timeout ++;
-
-      if(Rc_Timeout > 5)
+      if((++ Rc_Timeout) > 5)
       {
         //上报超时错误
         Error_Code.RC_Timeout_Error = 1;
@@ -559,7 +550,6 @@ void Rc_Parse(void *argument)
 void Log_Write(void *argument)
 {
   /* USER CODE BEGIN Log_Write */
-
   (void)argument;
 
   log_data_t LogData;
@@ -570,7 +560,7 @@ void Log_Write(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    //从日志队列取数据�?
+    //从日志队列取数据
     if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(100)) == pdTRUE)
     {
       Log_Save(&LogData);
@@ -597,10 +587,8 @@ void Log_Write(void *argument)
 void Sys_Observe(void *argument)
 {
   /* USER CODE BEGIN Sys_Observe */
-
   (void)argument;
-
-  /* Infinite loop */
+  
   for(;;)
   {
     /*IMU读取ID错误,直接停机*/
@@ -668,7 +656,7 @@ void Sys_Observe(void *argument)
       if((++cnt)%500 == 0)
       {
         Reset_USART(&huart2);
-        Receiver_Init();
+        RC_Init();
         
         if((cnt/500) > 100)
         {
@@ -677,7 +665,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD卡挂载错�?,尝试重启*/
+    /*SD卡挂载错�??,尝试重启*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;

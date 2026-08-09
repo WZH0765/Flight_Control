@@ -4,8 +4,8 @@
 #include "Config.h"
 #include "tim.h"
 
-HW_Lock_t  HW_LockState  = {0};
-Sys_Lock_t Sys_LockState = {0};
+hw_lock_t  HW_LockState  = {0};
+sys_lock_t Sys_LockState = {0};
 
 void Lock_Init(void)
 {
@@ -40,7 +40,7 @@ void Enable(void)
     __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 }
 
-void Lock_Detect(Detect_Lock_t Gesture)
+void Lock_Detect(ges_lock_t Gesture)
 {
     /* 外八→解锁 */
     if(Gesture.Left_X > LOCK_X_THRESHOLD && Gesture.Right_X < -LOCK_X_THRESHOLD &&Gesture.Throttle < LOCK_THRO_THRESHOLD)

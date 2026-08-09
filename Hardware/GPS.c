@@ -7,26 +7,26 @@
 #include "task.h"
 #include "GPS.h"
 
-gps_data_t GPS_DATA = {0};
+gps_data_t GpsData = {0};
 
-extern QueueHandle_t xGPS_DataQ;
+extern QueueHandle_t xGpsDataQ;
 
 void GPS_Init(void)
 {
-    GPS_DATA.Fix          = 0;
-    GPS_DATA.SatNum       = 0;
-    GPS_DATA.TimeStamp    = 0;
+    GpsData.Fix          = 0;
+    GpsData.SatNum       = 0;
+    GpsData.TimeStamp    = 0;
 
-    GPS_DATA.Hour         = 0;
-    GPS_DATA.Minute       = 0;
-    GPS_DATA.Second       = 0;
+    GpsData.Hour         = 0;
+    GpsData.Minute       = 0;
+    GpsData.Second       = 0;
 
-    GPS_DATA.Altitude     = 0;
-    GPS_DATA.Latitude  	  = 0;
-    GPS_DATA.Longitude 	  = 0;
+    GpsData.Altitude     = 0;
+    GpsData.Latitude  	  = 0;
+    GpsData.Longitude 	  = 0;
 
-    GPS_DATA.GroundSpeed  = 0;
-    GPS_DATA.GroundCourse = 0;
+    GpsData.GroundSpeed  = 0;
+    GpsData.GroundCourse = 0;
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
     __HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
@@ -49,25 +49,25 @@ static void GPS_ParseLine(const char *line)
         if(minmea_parse_rmc(&rmc,line))
         {
 			/*授时*/
-            GPS_DATA.Hour   = rmc.time.hours;
-            GPS_DATA.Minute = rmc.time.minutes;
-            GPS_DATA.Second = rmc.time.seconds;
+            GpsData.Hour   = rmc.time.hours;
+            GpsData.Minute = rmc.time.minutes;
+            GpsData.Second = rmc.time.seconds;
 
             if(rmc.valid == true)
             {
-                GPS_DATA.Latitude  	  = minmea_tocoord(&rmc.latitude);
-                GPS_DATA.Longitude 	  = minmea_tocoord(&rmc.longitude);
-                GPS_DATA.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514f;   //节 -> m/s
-                GPS_DATA.GroundCourse = minmea_tofloat(&rmc.course);
+                GpsData.Latitude  	  = minmea_tocoord(&rmc.latitude);
+                GpsData.Longitude 	  = minmea_tocoord(&rmc.longitude);
+                GpsData.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514f;   //节 -> m/s
+                GpsData.GroundCourse = minmea_tofloat(&rmc.course);
             }
             else
             {
-                GPS_DATA.Latitude     = 0.0;
-                GPS_DATA.Longitude    = 0.0;
-                GPS_DATA.GroundSpeed  = 0.0f;
-                GPS_DATA.GroundCourse = 0.0f;
+                GpsData.Latitude     = 0.0;
+                GpsData.Longitude    = 0.0;
+                GpsData.GroundSpeed  = 0.0f;
+                GpsData.GroundCourse = 0.0f;
             }
-            GPS_DATA.TimeStamp = xTaskGetTickCount();
+            GpsData.TimeStamp = xTaskGetTickCount();
         }
         break;
 
@@ -76,22 +76,22 @@ static void GPS_ParseLine(const char *line)
         {
             if(gga.fix_quality > 0)
             {
-                GPS_DATA.Fix = (gga.fix_quality >= 2) ? GPS_FIX_3D : GPS_FIX_2D;
-                GPS_DATA.SatNum    = gga.satellites_tracked;
-                GPS_DATA.Altitude  = minmea_tofloat(&gga.altitude);
-                GPS_DATA.Latitude  = minmea_tocoord(&gga.latitude);
-                GPS_DATA.Longitude = minmea_tocoord(&gga.longitude);
+                GpsData.Fix = (gga.fix_quality >= 2) ? GPS_FIX_3D : GPS_FIX_2D;
+                GpsData.SatNum    = gga.satellites_tracked;
+                GpsData.Altitude  = minmea_tofloat(&gga.altitude);
+                GpsData.Latitude  = minmea_tocoord(&gga.latitude);
+                GpsData.Longitude = minmea_tocoord(&gga.longitude);
             }
             else
             {
-                GPS_DATA.Fix = GPS_FIX_INVALID;
-                GPS_DATA.Altitude  = 0.0f;
-                GPS_DATA.Latitude  = 0.0;
-                GPS_DATA.Longitude = 0.0;
+                GpsData.Fix = GPS_FIX_INVALID;
+                GpsData.Altitude  = 0.0f;
+                GpsData.Latitude  = 0.0;
+                GpsData.Longitude = 0.0;
             }
-            GPS_DATA.TimeStamp = xTaskGetTickCount();
+            GpsData.TimeStamp = xTaskGetTickCount();
         //直接写入队列
-        xQueueOverwrite(xGPS_DataQ,&GPS_DATA);
+        xQueueOverwrite(xGpsDataQ,&GpsData);
         }
         break;
 

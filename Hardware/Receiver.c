@@ -95,13 +95,13 @@ float float_Map_with_median(float input_value, float input_min, float input_max,
 	启用空闲中断接收
 	关闭DMA传输过半中断
 */
-void Receiver_Init(void)
+void RC_Init(void)
 {
 	HAL_UARTEx_ReceiveToIdle_DMA(&huart2,RC_RxBuffer,sizeof(RC_RxBuffer));
 	__HAL_DMA_DISABLE_IT(&hdma_usart2_rx,DMA_IT_HT);
 }
 
-void CRSF_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output)
+void RC_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output)
 {
 	if(size <= 5 || Input[0] != CRSF_ADDRESS_FLIGHT_CONTROLLER)return;
 	

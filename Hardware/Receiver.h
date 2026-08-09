@@ -116,7 +116,7 @@ typedef struct
 
 extern rc_data_t RcTime;
 
-void Receiver_Init(void);
-void CRSF_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output);
+void RC_Init(void);
+void RC_Parse(uint8_t *Input,uint16_t size,rc_raw_t *Output);
 
 #endif

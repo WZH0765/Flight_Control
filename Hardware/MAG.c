@@ -1,12 +1,12 @@
 #include "cmsis_os2.h"
 #include "Config.h"
 #include "Error.h"
+#include "MyI2C.h"
 #include "Lock.h"
 #include "MAG.h"
 #include "i2c.h"
 
-mag_raw_t  MAG_RAW  = {0};
-mag_data_t MAG_DATA = {0};
+mag_raw_t MagRaw = {0};
 
 static int MAG_WriteReg(uint8_t reg,uint8_t val)
 {
@@ -57,26 +57,17 @@ void MAG_Init(void)
 	}
 }
 
-int MAG_Read(void)
+void MAG_Read(void)
 {
-	uint8_t status;
-	uint8_t data[6];
+	uint8_t status  = 0;
+	uint8_t data[6] = {0};
 
-	if(MAG_ReadReg(MAG_STAT_REG,&status,1) != 0)
-		return -1;
-	if((status & 0x01) == 0)
-		return -1;
+	if(MAG_ReadReg(MAG_STAT_REG,&status,1) != MAG_OK) return;
+	if((status&0x01) == 0) return;
 
-	if(MAG_ReadReg(MAG_DATA_L,data,6) != 0)
-		return -1;
+	if(MAG_ReadReg(MAG_DATA_L,data,6) != MAG_OK) return;
 
-	MAG_RAW.Mag[0] = (int16_t)((uint16_t)data[1] << 8 | data[0]);
-	MAG_RAW.Mag[1] = (int16_t)((uint16_t)data[3] << 8 | data[2]);
-	MAG_RAW.Mag[2] = (int16_t)((uint16_t)data[5] << 8 | data[4]);
-
-	MAG_DATA.Mag[0] = (float)MAG_RAW.Mag[0] * MAG_SCALE;
-	MAG_DATA.Mag[1] = (float)MAG_RAW.Mag[1] * MAG_SCALE;
-	MAG_DATA.Mag[2] = (float)MAG_RAW.Mag[2] * MAG_SCALE;
-
-	return 0;
+	MagRaw.Mag[0] = (int16_t)((uint16_t)data[1]<<8|data[0]);
+	MagRaw.Mag[1] = (int16_t)((uint16_t)data[3]<<8|data[2]);
+	MagRaw.Mag[2] = (int16_t)((uint16_t)data[5]<<8|data[4]);
 }

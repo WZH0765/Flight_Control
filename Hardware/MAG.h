@@ -17,10 +17,9 @@ typedef struct
     
 } mag_data_t;
 
-extern mag_raw_t  MAG_RAW;
-extern mag_data_t MAG_DATA;
+extern mag_raw_t MagRaw;
 
 void MAG_Init(void);
-int MAG_Read(void);
+void MAG_Read(void);
 
 #endif

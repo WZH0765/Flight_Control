@@ -26,7 +26,6 @@
 #include "memorymap.h"
 #include "sdmmc.h"
 #include "spi.h"
-#include "stm32h7xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -133,25 +132,25 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-  // IMU_Init();
+  RC_Init();
+  IMU_Init();
   MAG_Init();
-  // GPS_Init();
-  // PID_Init();
-  // Log_Init();
-  // Lock_Init();
-  // Receiver_Init();
-  // Filter_Init(0.5f,0.01f);
+  GPS_Init();
+  PID_Init();
+  Log_Init();
+  Lock_Init();
+  Filter_Init(0.5f,0.01f);
 
-  // if(Log_Status.Ready)
-  // {
-    // Log_Open();
-  // }
+  if(Log_Status.Ready)
+  {
+    Log_Open();
+  }
 
-  // HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
-  // HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
-  // HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
-  // HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
-  // __HAL_TIM_MOE_ENABLE(&htim1);
+  HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
+  HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);
+  HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
+  HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
+  __HAL_TIM_MOE_ENABLE(&htim1);
 
   /* USER CODE END 2 */
 
@@ -241,7 +240,7 @@ void SystemClock_Config(void)
 
 /* USER CODE BEGIN 4 */
 
-void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart,uint16_t Size)
 {
 	if(huart == &huart2)
 	{

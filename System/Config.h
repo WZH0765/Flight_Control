@@ -44,7 +44,6 @@
 /*LOCK_TASK define END*/
 
 #define LOG_BUF_SIZE      128
-#define LOG_QUEUE_LEN     256
 
 /*GPS_TASK define BEGIN*/
 #define GPS_LINE_MAX_LEN   100     //NMEA语句最大长度(含$和校验)

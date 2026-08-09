@@ -149,9 +149,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if(GPIO_Pin == IMU_INT1_Pin)
 	{
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;						//高优先级任务信号量
-		
 		xSemaphoreGiveFromISR(xIMU_DataReady,&xHigherPriorityTaskWoken);	//唤醒Task_IMU_Rd任务
-
 		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);						//高优先级任务被唤醒
 	}
 }
