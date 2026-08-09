@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#define MAG_OK 0
-
 typedef struct
 {
     int16_t Mag[3];         // X/Y/Z 原始LSB
@@ -13,13 +11,15 @@ typedef struct
 
 typedef struct
 {
-    float Mag[3];           // X/Y/Z 磁场强度(uT)
+    float Mx;
+    float My;
+    float Mz;
     
 } mag_data_t;
 
-extern mag_raw_t MagRaw;
+extern QueueHandle_t xMAG_DataQ;
 
 void MAG_Init(void);
-void MAG_Read(void);
+int MAG_Parse(void);
 
 #endif

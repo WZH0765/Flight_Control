@@ -109,6 +109,8 @@ uint8_t HW_Unlock(void)
     TickType_t xCurrentTime = xTaskGetTickCount();
 
     if(HW_LockState.IMU_Unlock == 0) return 0;
+    if(HW_LockState.MAG_Unlock == 0) return 0;
+    if(HW_LockState.GPS_Unlock == 0) return 0;
     //添加
 
     if((xCurrentTime - RcTime.TimeStamp) < pdMS_TO_TICKS(500))

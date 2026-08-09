@@ -20,22 +20,47 @@ void Filter_Init(float P,float I)
     Att.Ki = I;       //积分增益，消除稳态误差
 }
 
-void Filter_Update(float Ax,float Ay,float Az,float Gx,float Gy,float Gz,float dt)
+void Filter_Update(float Ax,float Ay,float Az,
+                   float Gx,float Gy,float Gz,
+                   float Mx,float My,float Mz,
+                   float dt)
 {
+    float Vx,Vy,Vz;
+    float Hx,Hy,Hz;
+    float Wx,Wy,Wz;
+    float Bx,   Bz;
+
     //加速度归一化
     float norm = sqrtf(Ax*Ax + Ay*Ay + Az*Az);
     if(norm < 0.001f) return;
     Ax /= norm; Ay /= norm; Az /= norm;
 
-    //提取重力向量（四元数转旋转矩阵第三列）
-    float V_x = 2.0f*(Att.Q1*Att.Q3 - Att.Q0*Att.Q2);
-    float V_y = 2.0f*(Att.Q0*Att.Q1 + Att.Q2*Att.Q3);
-    float V_z = Att.Q0*Att.Q0 - Att.Q1*Att.Q1 - Att.Q2*Att.Q2 + Att.Q3*Att.Q3;
+    //提取重力向量
+    Vx = 2.0f*(Att.Q1*Att.Q3 - Att.Q0*Att.Q2);
+    Vy = 2.0f*(Att.Q0*Att.Q1 + Att.Q2*Att.Q3);
+    Vz = Att.Q0*Att.Q0 - Att.Q1*Att.Q1 - Att.Q2*Att.Q2 + Att.Q3*Att.Q3;
 
     //叉乘计算误差
-    float Error_X = Ay*V_z - Az*V_y;
-    float Error_Y = Az*V_x - Ax*V_z;
-    float Error_Z = Ax*V_y - Ay*V_x;
+    float Error_X = Ay*Vz - Az*Vy;
+    float Error_Y = Az*Vx - Ax*Vz;
+    float Error_Z = Ax*Vy - Ay*Vx;
+
+    Hx = 2.0f*(Mx*(0.5f - Att.Q2*Att.Q2 - Att.Q3*Att.Q3) + My*(Att.Q1*Att.Q2 - Att.Q0*Att.Q3) + Mz*(Att.Q1*Att.Q3 + Att.Q0*Att.Q2));
+    Hy = 2.0f*(Mx*(Att.Q1*Att.Q2 + Att.Q0*Att.Q3) + My*(0.5f - Att.Q1*Att.Q1 - Att.Q3*Att.Q3) + Mz*(Att.Q2*Att.Q3 - Att.Q0*Att.Q1));
+    Hz = 2.0f*(Mx*(Att.Q1*Att.Q3 - Att.Q0*Att.Q2) + My*(Att.Q2*Att.Q3 + Att.Q0*Att.Q1) + Mz*(0.5f - Att.Q1*Att.Q1 - Att.Q2*Att.Q2));
+
+    Bx = sqrtf(Hx*Hx + Hy*Hy);
+    Bz = Hz;
+
+    //将地磁参考向量旋转回机体坐标系
+    Wx = 2.0f*(Bx*(0.5f - Att.Q2*Att.Q2 - Att.Q3*Att.Q3) + Bz*(Att.Q1*Att.Q3 - Att.Q0*Att.Q2));
+    Wy = 2.0f*(Bx*(Att.Q1*Att.Q2 - Att.Q0*Att.Q3) + Bz*(Att.Q0*Att.Q1 + Att.Q2*Att.Q3));
+    Wz = 2.0f*(Bx*(Att.Q0*Att.Q2 + Att.Q1*Att.Q3) + Bz*(0.5f - Att.Q1*Att.Q1 - Att.Q2*Att.Q2));
+
+    //累计总误差
+    Error_X += (My*Wz - Mz*Wy)*0.3f;
+    Error_Y += (Mz*Wx - Mx*Wz)*0.3f;
+    Error_Z += (Mx*Wy - My*Wx)*0.3f;
 
     //积分误差
     Att.Int_X += Error_X*Att.Ki*dt;
@@ -43,9 +68,9 @@ void Filter_Update(float Ax,float Ay,float Az,float Gx,float Gy,float Gz,float d
     Att.Int_Z += Error_Z*Att.Ki*dt;
 
     //陀螺仪补偿
-    Gx += Att.Kp * Error_X + Att.Int_X;
-    Gy += Att.Kp * Error_Y + Att.Int_Y;
-    Gz += Att.Kp * Error_Z + Att.Int_Z;
+    Gx += Att.Kp*Error_X + Att.Int_X;
+    Gy += Att.Kp*Error_Y + Att.Int_Y;
+    Gz += Att.Kp*Error_Z + Att.Int_Z;
 
     //四元数更新
     Att.Q0 += (-Att.Q1*Gx - Att.Q2*Gy - Att.Q3*Gz)*0.5f*dt;

@@ -8,9 +8,9 @@
 #define ACC_SCALE   9.80f/8192.0f     //m/s^2
 #define GYRO_SCALE  0.0174533f/32.8f
 
-#define YAW_SCALE   180.0f/100.0f
-#define ROLL_SCALE  45.00f/100.0f
-#define PITCH_SCALE 45.00f/100.0f
+#define YAW_SCALE   45.0f/100.0f
+#define ROLL_SCALE  45.0f/100.0f
+#define PITCH_SCALE 45.0f/100.0f
 /*****IMU define END*****/
 
 /****MAG define BEGIN****/
@@ -24,7 +24,7 @@
 #define MAG_CTRL_SRST  0x04
 #define MAG_CTRL_MODE  0x10
 
-#define MAG_SCALE   0.3f
+#define MAG_SCALE      0.3f
 /*****MAG define END*****/
 
 /*CONTROL_TASK define BEGIN*/
@@ -55,3 +55,8 @@
 /*GPS_TASK define END*/
 
 #define CLAMP(value,low,high) ((value)<(low)?(low):((value)>(high)?(high):(value)))
+
+//对于I2C轮询模块
+#define MAG_OK      0
+#define MAG_BUSY    1
+#define MAG_ERROR  -1

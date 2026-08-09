@@ -19,6 +19,8 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "portmacro.h"
+#include "projdefs.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -53,7 +55,6 @@
 
 SemaphoreHandle_t xGPS_DataReady;     //GPS数据就绪信号
 SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪信号
-SemaphoreHandle_t xMAG_DataReady;     //MAG数据就绪信号
 SemaphoreHandle_t xRC_DataReady;      //RC 数据就绪信号
 
 QueueHandle_t     xLOG_DataQ;         //LOG数据队列
@@ -79,7 +80,7 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-rc_raw_t RcRaw = {0};     //RC未处理数�???
+rc_raw_t RcRaw = {0};     //RC未处理数�???
 
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Imu_Timeout = 0;
@@ -170,7 +171,6 @@ void MX_FREERTOS_Init(void) {
 
   xRC_DataReady  = xSemaphoreCreateBinary();
   xIMU_DataReady = xSemaphoreCreateBinary();
-  xMAG_DataReady = xSemaphoreCreateBinary();
   xGPS_DataReady = xSemaphoreCreateBinary();
 
   /* USER CODE END RTOS_SEMAPHORES */
@@ -223,7 +223,7 @@ void MX_FREERTOS_Init(void) {
 
 /* USER CODE BEGIN Header_Imu_Read */
 /**
-  * @brief  Function implementing the Task_Imu_Rd thread.
+  * @brief  系统IMU数据处理函数
   * @param  argument: Not used
   * @retval None
   */
@@ -284,8 +284,8 @@ void Imu_Read(void *argument)
 
 /* USER CODE BEGIN Header_Sen_Read */
 /**
-* @brief Function implementing the Task_Sen_Rd thread.
-* @param argument: Not used
+* @brief  系统sensor数据处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Sen_Read */
@@ -294,10 +294,15 @@ void Sen_Read(void *argument)
   /* USER CODE BEGIN Sen_Read */
   (void)argument;
 
+  uint8_t cnt = 0;
+
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
   for(;;)
   {
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(10));    //10ms周期
 /***********GPS Data Read BEGIN***********/
-    if(xSemaphoreTake(xGPS_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
+    if(xSemaphoreTake(xGPS_DataReady,0) == pdTRUE)
     {
       Gps_Timeout = 0;
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
@@ -306,7 +311,7 @@ void Sen_Read(void *argument)
     else
     {
       Gps_Timeout ++;
-      if(Gps_Timeout > 10)                 //5秒无数据
+      if(Gps_Timeout > 500)                 //5秒无数据
       {
         Error_Code.GPS_Timeout_Error = 1;
       }
@@ -314,9 +319,27 @@ void Sen_Read(void *argument)
 /************GPS Data Read END************/
 
 /***********MAG Data Read BEGIN***********/
-    // MagData.Mag[0] = (float)MagRaw.Mag[0]*MAG_SCALE;
-    // MagData.Mag[1] = (float)MagRaw.Mag[1]*MAG_SCALE;
-    // MagData.Mag[2] = (float)MagRaw.Mag[2]*MAG_SCALE;
+    if((++ cnt) >= 5)
+    {
+      int result = MAG_Parse();
+      if(result == MAG_OK)
+      {
+        Mag_Timeout = 0;
+        Error_Code.MAG_Timeout_Error = 0;
+      }
+      else if(result == MAG_BUSY)
+      {
+        if((++ Mag_Timeout) >= 20)
+        {
+          Error_Code.MAG_Timeout_Error = 1;
+        }
+      }
+      else
+      {
+        Error_Code.MAG_Timeout_Error = 1;
+      }
+      cnt = 0;
+    }
 /************MAG Data Read END************/
   }
   /* USER CODE END Sen_Read */
@@ -324,8 +347,8 @@ void Sen_Read(void *argument)
 
 /* USER CODE BEGIN Header_Pos_Estimate */
 /**
-* @brief Function implementing the Task_Pos_Est thread.
-* @param argument: Not used
+* @brief  系统位置数据处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Pos_Estimate */
@@ -349,8 +372,8 @@ void Pos_Estimate(void *argument)
 
 /* USER CODE BEGIN Header_Att_Control */
 /**
-* @brief Function implementing the Task_Att_Ctrl thread.
-* @param argument: Not used
+* @brief  系统总体数据处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Att_Control */
@@ -362,6 +385,7 @@ void Att_Control(void *argument)
   rc_data_t  RcData  = {0};     //RC 缩放数据
   imu_raw_t  ImuRaw  = {0};     //IMU原始数据
   imu_data_t ImuData = {0};     //IMU缩放数据
+  mag_data_t MagData = {0};     //MAG缩放数据
 
   TickType_t xCurrentTime;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //上次任务唤醒时刻
@@ -387,7 +411,16 @@ void Att_Control(void *argument)
       ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
       ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
 
-      Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,ImuData.Gx,ImuData.Gy,ImuData.Gz,ATT_CTRL_DT);
+      if(xQueuePeek(xMAG_DataQ,&MagData,0) != pdTRUE)
+      {
+        MagData.Mx = 0.0f;
+        MagData.My = 0.0f;
+        MagData.Mz = 0.0f;
+      }
+      Filter_Update(ImuData.Ax,ImuData.Ay,ImuData.Az,
+                    ImuData.Gx,ImuData.Gy,ImuData.Gz,
+                    MagData.Mx,MagData.My,MagData.Mz,
+                    ATT_CTRL_DT);
 
       /**获取RC数据**/
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
@@ -406,6 +439,10 @@ void Att_Control(void *argument)
         else    //电机使能且未蜂鸣
         {
           /***外环:角度PID***/
+          PID_Angle_Yaw.Target    = RcData.Yaw_Target;
+          PID_Angle_Yaw.Actual    = Att.Yaw;
+          float Rate_Yaw_Target   = PID_Calculate(&PID_Angle_Yaw  ,ATT_CTRL_DT);
+
           PID_Angle_Roll.Target   = RcData.Roll_Target;
           PID_Angle_Roll.Actual   = Att.Roll;
           float Rate_Roll_Target  = PID_Calculate(&PID_Angle_Roll ,ATT_CTRL_DT);
@@ -414,7 +451,11 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角�?�度PID***/
+          /***内环:角速度PID***/
+          PID_Rate_Yaw.Target     = Rate_Yaw_Target;
+          PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
+          float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
+
           PID_Rate_Roll.Target    = Rate_Roll_Target;
           PID_Rate_Roll.Actual    = ImuData.Gx;          //X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
@@ -423,11 +464,7 @@ void Att_Control(void *argument)
           PID_Rate_Pitch.Actual   = ImuData.Gy;          //Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
-          PID_Rate_Yaw.Target     = RcData.Yaw_Target;
-          PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
-          float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
-
-          //基准PWM与修正系�?
+          //基准PWM与修正
           float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
 
@@ -451,7 +488,7 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁�?
+        //无有效RC数据则电机锁
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
@@ -487,8 +524,8 @@ void Att_Control(void *argument)
 
 /* USER CODE BEGIN Header_Rc_Parse */
 /**
-* @brief Function implementing the Task_Rc_Parse thread.
-* @param argument: Not used
+* @brief  系统遥控数据处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Rc_Parse */
@@ -540,8 +577,8 @@ void Rc_Parse(void *argument)
 
 /* USER CODE BEGIN Header_Log_Write */
 /**
-* @brief Function implementing the Task_Log_Wrt thread.
-* @param argument: Not used
+* @brief  系统日志处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Log_Write */
@@ -577,8 +614,8 @@ void Log_Write(void *argument)
 
 /* USER CODE BEGIN Header_Sys_Observe */
 /**
-* @brief Function implementing the Task_Sys_Obs thread.
-* @param argument: Not used
+* @brief  系统错误处理函数
+* @param  argument: Not used
 * @retval None
 */
 /* USER CODE END Header_Sys_Observe */
@@ -663,7 +700,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD卡挂载错�???,尝试重启*/
+    /*SD卡挂载错�???,尝试重启*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;
