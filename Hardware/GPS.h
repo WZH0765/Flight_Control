@@ -24,9 +24,10 @@ typedef struct
 
 } gps_data_t;
 
-extern gps_data_t GPS_DATA;
+extern gps_data_t GpsData;
+extern QueueHandle_t xGPS_DataQ;
 
 void GPS_Init(void);
-void GPS_Parse(uint8_t *buffer, uint16_t len);
+void GPS_Parse(uint8_t *buffer,uint16_t len);
 
 #endif

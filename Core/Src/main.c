@@ -52,8 +52,8 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-extern SemaphoreHandle_t xGPS_DataReady;     //GPSć°ćŽĺ°ąçťŞäżĄĺˇé?
-extern SemaphoreHandle_t xRC_DataReady;      //RC ć°ćŽĺ°ąçťŞäżĄĺˇé?
+extern SemaphoreHandle_t xGPS_DataReady;
+extern SemaphoreHandle_t xRC_DataReady;
 
 /* USER CODE END PTD */
 
@@ -133,18 +133,18 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   RC_Init();
-  IMU_Init();
-  MAG_Init();
+  // IMU_Init();
+  // MAG_Init();
   GPS_Init();
-  PID_Init();
-  Log_Init();
-  Lock_Init();
-  Filter_Init(0.5f,0.01f);
+  // PID_Init();
+  // Log_Init();
+  // Lock_Init();
+  // Filter_Init(0.5f,0.01f);
 
-  if(Log_Status.Ready)
-  {
-    Log_Open();
-  }
+  // if(Log_Status.Ready)
+  // {
+  //   Log_Open();
+  // }
 
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);

@@ -9,8 +9,6 @@
 
 gps_data_t GpsData = {0};
 
-extern QueueHandle_t xGpsDataQ;
-
 void GPS_Init(void)
 {
     GpsData.Fix          = 0;
@@ -22,14 +20,14 @@ void GPS_Init(void)
     GpsData.Second       = 0;
 
     GpsData.Altitude     = 0;
-    GpsData.Latitude  	  = 0;
-    GpsData.Longitude 	  = 0;
+    GpsData.Latitude  	 = 0;
+    GpsData.Longitude 	 = 0;
 
     GpsData.GroundSpeed  = 0;
     GpsData.GroundCourse = 0;
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
-    __HAL_DMA_DISABLE_IT(&hdma_usart3_rx, DMA_IT_HT);
+    __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);
 }
 
 /*
@@ -91,7 +89,7 @@ static void GPS_ParseLine(const char *line)
             }
             GpsData.TimeStamp = xTaskGetTickCount();
         //直接写入队列
-        xQueueOverwrite(xGpsDataQ,&GpsData);
+        xQueueOverwrite(xGPS_DataQ,&GpsData);
         }
         break;
 
