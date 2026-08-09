@@ -6,6 +6,10 @@
 #include "MAG.h"
 #include "i2c.h"
 
+/*
+*	值得注意的是，H7 硬件I2C需要配置GPIO为 pull up和very high
+*/
+
 mag_raw_t MagRaw = {0};
 
 static int MAG_WriteReg(uint8_t reg,uint8_t val)
@@ -30,10 +34,6 @@ void MAG_Init(void)
 {
 	uint8_t ID = 0;
     int status = MAG_OK;
-
-    //软复位
-	status |= MAG_WriteReg(MAG_CTRL_REG,MAG_CTRL_SRST);
-	osDelay(50);
 
     //读ID
 	status |= MAG_ReadReg(MAG_ID_REG,&ID,1);

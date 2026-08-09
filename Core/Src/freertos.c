@@ -79,7 +79,7 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-rc_raw_t RcRaw = {0};     //RC未处理数�??
+rc_raw_t RcRaw = {0};     //RC未处理数�???
 
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Imu_Timeout = 0;
@@ -241,7 +241,7 @@ void Imu_Read(void *argument)
     int32_t AccSum[3]  = {0};
     int32_t GyroSum[3] = {0};
 
-    //等待信号�?
+    //等待信号
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);
 
     //获取字节
@@ -255,7 +255,6 @@ void Imu_Read(void *argument)
       continue;
     }
 
-    //累加取平
     for(int i = 0;i < Cnt;i ++)
     {
       inv_imu_get_fifo_frame(&IMU,&FIFO_Data);
@@ -278,7 +277,6 @@ void Imu_Read(void *argument)
     ImuRaw.Gyro[1] = GyroSum[1]/Cnt;
     ImuRaw.Gyro[2] = GyroSum[2]/Cnt;
 
-    //覆写新数
     xQueueOverwrite(xIMU_DataQ,&ImuRaw);
   }
   /* USER CODE END Imu_Read */
@@ -416,7 +414,7 @@ void Att_Control(void *argument)
           PID_Angle_Pitch.Actual  = Att.Pitch;
           float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch,ATT_CTRL_DT);
 
-          /***内环:角速度PID***/
+          /***内环:角�?�度PID***/
           PID_Rate_Roll.Target    = Rate_Roll_Target;
           PID_Rate_Roll.Actual    = ImuData.Gx;          //X=滚转速度(rad/s)
           float Out_Roll          = PID_Calculate(&PID_Rate_Roll,ATT_CTRL_DT);
@@ -429,7 +427,7 @@ void Att_Control(void *argument)
           PID_Rate_Yaw.Actual     = ImuData.Gz;          //Z=偏航速度(rad/s)
           float Out_Yaw           = PID_Calculate(&PID_Rate_Yaw,ATT_CTRL_DT);
 
-          //基准PWM与修正系数
+          //基准PWM与修正系�?
           float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
           float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
 
@@ -453,7 +451,7 @@ void Att_Control(void *argument)
       }
       else /*RC数据异常处理*/
       {
-        //无有效RC数据则电机锁定
+        //无有效RC数据则电机锁�?
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
@@ -665,7 +663,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD卡挂载错�??,尝试重启*/
+    /*SD卡挂载错�???,尝试重启*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;

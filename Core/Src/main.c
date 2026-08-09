@@ -132,9 +132,9 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-  RC_Init();
+  // RC_Init();
   // IMU_Init();
-  // MAG_Init();
+  MAG_Init();
   GPS_Init();
   // PID_Init();
   // Log_Init();
