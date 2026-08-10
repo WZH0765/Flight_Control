@@ -12,6 +12,12 @@ PID_Controller PID_Angle_Pitch;
 PID_Controller PID_Angle_Roll;
 PID_Controller PID_Angle_Yaw;
 
+/*PID（内环）-速度*/
+PID_Controller PID_Velocity;
+
+/*PID（外环）-高度*/
+PID_Controller PID_Altitude;
+
 void PID_Init(void)
 {
 	/*INNERLOOP INIT BEGIN*/
@@ -25,6 +31,9 @@ void PID_Init(void)
 	PID_Set_Paramaters(&PID_Angle_Roll,4.0f,0.0f,0.0f,80.0f,30.0f);
 	PID_Set_Paramaters(&PID_Angle_Yaw,4.0f,0.0f,0.0f,80.0f,30.0f);
 	/*OUTTERLOOP INIT END*/
+
+	PID_Set_Paramaters(&PID_Altitude,1.5f,0.0f,0.0f,10.0f,5.0f);
+    PID_Set_Paramaters(&PID_Velocity,0.8f,0.0f,0.0f,5.0f,0.25f);
 }
 
 /*设置PID参数值*/

@@ -19,8 +19,6 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
-#include "BAR.h"
-#include "portmacro.h"
 #include "projdefs.h"
 #include "task.h"
 #include "main.h"
@@ -43,12 +41,13 @@
 #include "iwdg.h"
 #include "Lock.h"
 #include "IMU.h"
+#include "BAR.h"
 #include "MAG.h"
+#include "GPS.h"
 #include "PID.h"
 #include "tim.h"
 #include "Log.h"
 #include "ff.h"
-#include "GPS.h"
 
 /* USER CODE END Includes */
 
@@ -84,6 +83,8 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* USER CODE BEGIN Variables */
 
 rc_raw_t RcRaw = {0};
+
+float HeightCorr = 0;
 
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Gps_Timeout = 0;
@@ -382,19 +383,61 @@ void Pos_Estimate(void *argument)
   /* USER CODE BEGIN Pos_Estimate */
   (void)argument;
 
+  rc_data_t  RcData;
   gps_data_t GpsData;
   bar_data_t BarData;
+
+  float Base_Height   = 0.0f;    //基准高度（绝对）
+  float Target_Height = 0.0f;    //目标高度（相对）
+  float Actual_Height = 0.0f;    //当前高度（相对）
+
+  uint8_t Set_Ground  = 0;       //是否完成校准
 
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(20));
-    
-    if(xQueuePeek(xBAR_DataQ,&BarData,0) == pdTRUE)
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(20));  // 50Hz
+
+    if(xQueuePeek(xBAR_DataQ,&BarData,0) != pdTRUE) continue;
+    if(Set_Ground == 0 && Sys_LockState.LockState == 1 && BarData.Height > 1.0f)
     {
-      
+      Target_Height = 0.0f;
+      Base_Height = BarData.Height;
+      Set_Ground = 1;
     }
+    if(Set_Ground == 0) continue;
+
+    Actual_Height = BarData.Height - Base_Height;
+    if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE)
+    {
+      //上升
+      if(RcData.Throttle > 0.55f && Target_Height < 50.0f)
+      {
+        Target_Height += (RcData.Throttle - 0.5f)*0.3f;
+      }
+      //下降
+      else if(RcData.Throttle < 0.45f && Target_Height > 0.0f)
+      {
+        Target_Height += (RcData.Throttle - 0.5f)*0.3f;
+      }
+      //保持
+      else
+      {
+        Target_Height = Actual_Height;
+      }
+      Target_Height = CLAMP(Target_Height,0,50);
+    }
+
+    PID_Altitude.Target = Target_Height;
+    PID_Altitude.Actual = Actual_Height;
+    float Target_Speed = PID_Calculate(&PID_Altitude,0.02f);
+
+    PID_Velocity.Target = Target_Speed;
+    PID_Velocity.Actual = 0.0f;
+    HeightCorr = PID_Calculate(&PID_Velocity,0.02f);
+
+    HeightCorr = CLAMP(HeightCorr,-0.25,0.25);
   }
   /* USER CODE END Pos_Estimate */
 }
@@ -493,9 +536,10 @@ void Att_Control(void *argument)
           PID_Rate_Pitch.Actual   = ImuData.Gy;          //Y=俯仰速度(rad/s)
           float Out_Pitch         = PID_Calculate(&PID_Rate_Pitch,ATT_CTRL_DT);
 
-          //基准PWM与修正
-          float BasePwm  = PWM_MIN + RcData.Throttle*PWM_RANGE;
-          float BaseCorr = 0.5f*RcData.Throttle*PWM_RANGE;
+          //基准PWM与修正量
+          float Throttle = CLAMP(RcData.Throttle + HeightCorr,0.0f,1.0f);
+          float BasePwm  = PWM_MIN + Throttle*PWM_RANGE;
+          float BaseCorr = 0.5f*Throttle*PWM_RANGE;
 
           //四电机修正量
           float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
@@ -729,7 +773,7 @@ void Sys_Observe(void *argument)
       }
     }
 
-    /*SD卡挂载错�???,尝试重启*/
+    /*SD卡挂载错误,尝试重启*/
     if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
     {
       static uint16_t cnt = 0;

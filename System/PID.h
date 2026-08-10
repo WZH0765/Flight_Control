@@ -28,4 +28,7 @@ extern PID_Controller PID_Angle_Pitch;
 extern PID_Controller PID_Angle_Roll;
 extern PID_Controller PID_Angle_Yaw;
 
+extern PID_Controller PID_Velocity;
+extern PID_Controller PID_Altitude;
+
 #endif

@@ -11,7 +11,7 @@
 /*底层写入函数*/
 static int32_t BAR_WriteReg(uint16_t DevAddr,uint16_t Reg,uint8_t *pData,uint16_t Len)
 {
-    if(HAL_I2C_Mem_Write(&hi2c1,DevAddr,Reg,I2C_MEMADD_SIZE_8BIT,pData,Len,100) != HAL_OK)
+    if(HAL_I2C_Mem_Write(&hi2c2,DevAddr,Reg,I2C_MEMADD_SIZE_8BIT,pData,Len,100) != HAL_OK)
     {
         return LPS22HH_ERROR;
     }
@@ -21,7 +21,7 @@ static int32_t BAR_WriteReg(uint16_t DevAddr,uint16_t Reg,uint8_t *pData,uint16_
 /*底层读取函数*/
 static int32_t BAR_ReadReg(uint16_t DevAddr,uint16_t Reg,uint8_t *pData,uint16_t Len)
 {
-    if(HAL_I2C_Mem_Read(&hi2c1,DevAddr,Reg,I2C_MEMADD_SIZE_8BIT,pData,Len,100) != HAL_OK)
+    if(HAL_I2C_Mem_Read(&hi2c2,DevAddr,Reg,I2C_MEMADD_SIZE_8BIT,pData,Len,100) != HAL_OK)
     {
         return LPS22HH_ERROR;
     }
