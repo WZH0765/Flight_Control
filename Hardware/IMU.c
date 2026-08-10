@@ -74,8 +74,8 @@ void IMU_Init(void)
 	
 	/*define drivers_BEGIN*/
 	IMU.transport.write_reg	 = IMU_WriteReg;
-	IMU.transport.sleep_us	 = IMU_Sleep;
 	IMU.transport.read_reg	 = IMU_ReadReg;
+	IMU.transport.sleep_us	 = IMU_Sleep;
 	IMU.transport.serif_type = UI_SPI4;
 	/*define drivers_END*/
 	

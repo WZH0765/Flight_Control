@@ -9,16 +9,16 @@ sys_lock_t Sys_LockState = {0};
 
 void Lock_Init(void)
 {
-    Sys_LockState.BeepCnt = 0;
-    Sys_LockState.LockCnt = 0;
-    Sys_LockState.Locking = 0;
+    Sys_LockState.BeepCnt   = 0;
+    Sys_LockState.LockCnt   = 0;
+    Sys_LockState.Locking   = 0;
     Sys_LockState.UnlockCnt = 0;
     Sys_LockState.LockState = 1;
 
-    HW_LockState.SD_Unlock       = 0;
-    HW_LockState.IMU_Unlock      = 0;
-    HW_LockState.GPS_Unlock      = 0;
-    HW_LockState.Baro_Unlock     = 0;
+    HW_LockState.SD_Unlock  = 0;
+    HW_LockState.IMU_Unlock = 0;
+    HW_LockState.GPS_Unlock = 0;
+    HW_LockState.BAR_Unlock = 0;
 }
 
 void Disable(void)

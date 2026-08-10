@@ -19,6 +19,7 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "BAR.h"
 #include "portmacro.h"
 #include "projdefs.h"
 #include "task.h"
@@ -30,6 +31,7 @@
 
 #include "inv_imu_driver.h"
 #include "Receiver.h"
+#include "lps22hh.h"
 #include <stdint.h>
 #include <string.h>
 #include "semphr.h"
@@ -61,6 +63,7 @@ QueueHandle_t     xLOG_DataQ;         //LOG数据队列
 QueueHandle_t     xGPS_DataQ;         //GPS数据队列
 QueueHandle_t     xIMU_DataQ;         //IMU数据队列
 QueueHandle_t     xMAG_DataQ;         //MAG数据队列
+QueueHandle_t     xBAR_DataQ;         //BAR数据队列
 QueueHandle_t     xRC_DataQ;          //RC 数据队列
 
 /* USER CODE END PTD */
@@ -80,12 +83,13 @@ QueueHandle_t     xRC_DataQ;          //RC 数据队列
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
 
-rc_raw_t RcRaw = {0};     //RC未处理数�???
+rc_raw_t RcRaw = {0};
 
 static uint16_t Rc_Timeout  = 0;
+static uint16_t Gps_Timeout = 0;
 static uint16_t Imu_Timeout = 0;
 static uint16_t Mag_Timeout = 0;
-static uint16_t Gps_Timeout = 0;
+static uint16_t Bar_Timeout = 0;
 
 /* USER CODE END Variables */
 /* Definitions for Task_Imu_Rd */
@@ -185,6 +189,7 @@ void MX_FREERTOS_Init(void) {
   xIMU_DataQ = xQueueCreate(1,sizeof(imu_raw_t));
   xMAG_DataQ = xQueueCreate(1,sizeof(mag_data_t));
   xGPS_DataQ = xQueueCreate(1,sizeof(gps_data_t));
+  xBAR_DataQ = xQueueCreate(1,sizeof(bar_data_t));
   xLOG_DataQ = xQueueCreate(256,sizeof(log_data_t));
 
   /* USER CODE END RTOS_QUEUES */
@@ -294,7 +299,8 @@ void Sen_Read(void *argument)
   /* USER CODE BEGIN Sen_Read */
   (void)argument;
 
-  uint8_t cnt = 0;
+  uint8_t Magcnt = 0;
+  uint8_t Barcnt = 0;
 
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
@@ -319,7 +325,7 @@ void Sen_Read(void *argument)
 /************GPS Data Read END************/
 
 /***********MAG Data Read BEGIN***********/
-    if((++ cnt) >= 5)
+    if((++ Magcnt) >= 5)
     {
       int result = MAG_Parse();
       if(result == MAG_OK)
@@ -338,9 +344,28 @@ void Sen_Read(void *argument)
       {
         Error_Code.MAG_Timeout_Error = 1;
       }
-      cnt = 0;
+      Magcnt = 0;
     }
 /************MAG Data Read END************/
+
+/***********BAR Data Read BEGIN***********/
+    if((++ Barcnt) >= 2)
+    {
+      if(BAR_Read() == LPS22HH_OK)
+      {
+        Bar_Timeout = 0;
+        Error_Code.BAR_Timeout_Error = 0;
+      }
+      else
+      {
+        if((++ Bar_Timeout) >= 50)
+        {
+          Error_Code.BAR_Timeout_Error = 1;
+        }
+      }
+      Barcnt = 0;
+    }
+/************BAR Data Read END************/
   }
   /* USER CODE END Sen_Read */
 }
@@ -358,11 +383,15 @@ void Pos_Estimate(void *argument)
   (void)argument;
 
   gps_data_t GpsData;
+  bar_data_t BarData;
 
-  /* Infinite loop */
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
   for(;;)
   {
-    if(xQueueReceive(xGPS_DataQ,&GpsData,pdMS_TO_TICKS(200)) == pdTRUE)
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(20));
+    
+    if(xQueuePeek(xBAR_DataQ,&BarData,0) == pdTRUE)
     {
       
     }

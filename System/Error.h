@@ -23,6 +23,11 @@ typedef struct
     uint8_t MAG_Config_Error;   //配置错误
     uint8_t MAG_Timeout_Error;  //超时错误
 
+    //BAR
+    uint8_t BAR_ReadID_Error;   //读ID错误
+    uint8_t BAR_Config_Error;   //配置错误
+    uint8_t BAR_Timeout_Error;  //超时错误
+
     //GPS
     uint8_t GPS_Timeout_Error;  //超时错误
 
