@@ -31,10 +31,15 @@ static int32_t BAR_ReadReg(uint16_t DevAddr,uint16_t Reg,uint8_t *pData,uint16_t
 /*底层休眠函数*/
 static void BAR_Delay(uint32_t ms)
 {
+    if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
+    {
+        vTaskDelay(pdMS_TO_TICKS(ms));
+        return;
+    }
     volatile uint32_t count = ms*(SystemCoreClock/1000)/10;
     while (count--)
     {
-        __NOP();
+        __asm volatile ("nop");
     }
 }
 
@@ -59,9 +64,10 @@ void BAR_Init(void)
     LPS22HH_ReadID(&BAR,&ID);
     if(ID != LPS22HH_ID)
     {
-        Error_Code.BAR_ReadID_Error = 1;
+        Error_Code.BAR_Error = 1;
     }
 
+    status |= lps22hh_lp_bandwidth_set(&BAR.Ctx,LPS22HH_LPF_ODR_DIV_9);
     status |= LPS22HH_PRESS_Enable(&BAR);
     status |= LPS22HH_TEMP_Enable(&BAR);
 
@@ -71,7 +77,7 @@ void BAR_Init(void)
     }
     else
     {
-        Error_Code.BAR_Config_Error = 1;
+        Error_Code.BAR_Error = 1;
         return;
     }
 }

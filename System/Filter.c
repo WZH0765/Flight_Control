@@ -32,8 +32,17 @@ void Filter_Update(float Ax,float Ay,float Az,
 
     //加速度归一化
     float norm = sqrtf(Ax*Ax + Ay*Ay + Az*Az);
+    float diff = fabsf(norm - 9.8f);
     if(norm < 0.001f) return;
     Ax /= norm; Ay /= norm; Az /= norm;
+
+    //磁力计权重
+    float mag_weight = 0.3f;
+    if(diff > 0.5f)
+    {
+        mag_weight = 0.3f*(1.0f - (diff - 0.5f)/4.5f);  // 0.5~5.0 线性递减
+        if(mag_weight < 0.0f) mag_weight = 0.0f;
+    }
 
     //提取重力向量
     Vx = 2.0f*(Att.Q1*Att.Q3 - Att.Q0*Att.Q2);
@@ -58,9 +67,9 @@ void Filter_Update(float Ax,float Ay,float Az,
     Wz = 2.0f*(Bx*(Att.Q0*Att.Q2 + Att.Q1*Att.Q3) + Bz*(0.5f - Att.Q1*Att.Q1 - Att.Q2*Att.Q2));
 
     //累计总误差
-    Error_X += (My*Wz - Mz*Wy)*0.3f;
-    Error_Y += (Mz*Wx - Mx*Wz)*0.3f;
-    Error_Z += (Mx*Wy - My*Wx)*0.3f;
+    Error_X += (My*Wz - Mz*Wy)*mag_weight;
+    Error_Y += (Mz*Wx - Mx*Wz)*mag_weight;
+    Error_Z += (Mx*Wy - My*Wx)*mag_weight;
 
     //积分误差
     Att.Int_X += Error_X*Att.Ki*dt;

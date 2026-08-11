@@ -40,43 +40,6 @@ void Enable(void)
     __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
 }
 
-void Lock_Detect(ges_lock_t Gesture)
-{
-    /* 外八→解锁 */
-    if(Gesture.Left_X > LOCK_X_THRESHOLD && Gesture.Right_X < -LOCK_X_THRESHOLD &&Gesture.Throttle < LOCK_THRO_THRESHOLD)
-    {
-        if(Sys_LockState.LockState == 1)        //当前状态为失能
-        {
-            Sys_LockState.LockCnt = 0;
-            Sys_LockState.UnlockCnt ++;
-            if(Sys_LockState.UnlockCnt >= LOCK_HOLDTIME && HW_Unlock())
-            {
-                Enable();
-                Sys_LockState.UnlockCnt = 0;
-            }
-        }
-    }
-    /* 内八→上锁 */
-    else if(Gesture.Left_X < -LOCK_X_THRESHOLD && Gesture.Right_X > LOCK_X_THRESHOLD)
-    {
-        if(Sys_LockState.LockState == 0)        //当前状态为使能
-        {
-            Sys_LockState.LockCnt ++;
-            Sys_LockState.UnlockCnt = 0;
-            if(Sys_LockState.LockCnt >= LOCK_HOLDTIME)
-            {
-                Disable();
-                Sys_LockState.LockCnt = 0;
-            }
-        }
-    }
-    else
-    {
-        Sys_LockState.LockCnt = 0;
-        Sys_LockState.UnlockCnt = 0;
-    }
-}
-
 /*蜂鸣总时间150ms，单次蜂鸣时间50ms*/
 void Beep(void)
 {
@@ -110,6 +73,7 @@ uint8_t HW_Unlock(void)
 
     if(HW_LockState.IMU_Unlock == 0) return 0;
     if(HW_LockState.MAG_Unlock == 0) return 0;
+    if(HW_LockState.BAR_Unlock == 0) return 0;
     if(HW_LockState.GPS_Unlock == 0) return 0;
     //添加
 

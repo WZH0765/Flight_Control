@@ -27,19 +27,9 @@ typedef struct
 
 } sys_lock_t;
 
-/*手势锁状态*/
-typedef struct
-{
-    float Left_X;
-    float Right_X;
-    float Throttle;
-
-} ges_lock_t;
-
 void Lock_Init(void);
 void Lock_Update(void);
 uint8_t HW_Unlock(void);
-void Lock_Detect(ges_lock_t gesture);
 
 extern hw_lock_t  HW_LockState;
 extern sys_lock_t Sys_LockState;

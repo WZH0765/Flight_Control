@@ -26,6 +26,8 @@
 #include "memorymap.h"
 #include "sdmmc.h"
 #include "spi.h"
+#include "state.h"
+#include "stm32h7xx_hal.h"
 #include "tim.h"
 #include "usart.h"
 #include "gpio.h"
@@ -134,6 +136,7 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
+  FC_InitState();   //初始化状态机
   Params_Init();    //初始化所有参数
 
   RC_Init();
@@ -155,6 +158,12 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
   __HAL_TIM_MOE_ENABLE(&htim1);
+
+  HAL_Delay(5000);
+  if(HW_Unlock() == 1)
+  {
+    FC_HandleEvent(EVENT_INIT_DONE);
+  }
 
   /* USER CODE END 2 */
 

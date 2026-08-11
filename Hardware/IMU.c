@@ -1,9 +1,10 @@
 #include "main.h"
+#include "state.h"
 #include "stm32h7xx.h"                  // Device header
 #include "inv_imu_driver.h"
 #include "FreeRTOS.h"
 #include "semphr.h"
-#include "Error.h"
+#include "State.h"
 #include "stdio.h"
 #include "Lock.h"
 #include "IMU.h"
@@ -51,11 +52,20 @@ static int IMU_ReadReg(uint8_t reg,uint8_t *buf,uint32_t len)
 /*底层休眠函数*/
 static void IMU_Sleep(uint32_t us)
 {
-	volatile uint32_t count = us*(SystemCoreClock/1000000)/10;
-	while(count--)
+    if(us >= 500)
 	{
-		__NOP();
-	}
+        if(xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
+		{
+            //至少让出 1ms，虽然实际延时变长，但保证了实时任务不被阻塞
+            vTaskDelay(pdMS_TO_TICKS(1));
+            return;
+        }
+    }
+    volatile uint32_t count = us*(SystemCoreClock/1000000)/10;
+    while(count--)
+	{
+       __asm volatile ("nop");
+    }
 }
 
 inv_imu_device_t IMU = {0};
@@ -82,7 +92,7 @@ void IMU_Init(void)
 	inv_imu_get_who_am_i(&IMU,&ID);
 	if(ID != INV_IMU_WHOAMI)
 	{
-		Error_Code.IMU_ReadID_Error = 1;
+		FC_HandleEvent(EVENT_IMU_ERROR);
 		return ;
 	}
 
@@ -136,7 +146,7 @@ void IMU_Init(void)
 	}
 	else
 	{
-		Error_Code.IMU_Config_Error = 1;
+		FC_HandleEvent(EVENT_IMU_ERROR);
 		return ;
 	}
 }

@@ -26,10 +26,7 @@
 /*CONTROL_TASK define BEGIN*/
 #define PWM_MIN     900
 #define PWM_MAX     2000
-
 #define PID_NORM    1.0f/50.0f
-
-
 #define PWM_RANGE   PWM_MAX - PWM_MIN
 /**CONTROL_TASK define END**/
 
@@ -59,8 +56,15 @@
 
 //任务周期 DT
 #define SEN_READ_DT 10
-#define MAG_READ_DT 5
-#define BAR_READ_DT 2
+
+/**
+*     MAG_READ周期    SEN_READ_DT*MAG_READ_DIV
+*     BAR_READ周期    SEN_READ_DT*BAR_READ_DIV
+**/
+
+#define MAG_READ_DIV 5
+#define BAR_READ_DIV 2
+
 #define POS_ESTI_DT 20
 #define ATT_CTRL_DT 1
 #define RC_PARSE_DT 500

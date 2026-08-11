@@ -46,7 +46,7 @@ void Params_Init(void)
 
     /* -------- 高度环-外环 -------- */
     PARAMS.Height.Kp       = 1.5f;
-    PARAMS.Height.Ki       = 0.0f;
+    PARAMS.Height.Ki       = 0.05f;
     PARAMS.Height.Kd       = 0.0f;
     PARAMS.Height.IntLimit = 10.0f;
     PARAMS.Height.OutLimit = 5.0f;
@@ -69,16 +69,4 @@ void Params_Init(void)
     PARAMS.Attitude_Control.Yaw_Scale   = 45.0f/100.0f;
     PARAMS.Attitude_Control.Roll_Scale  = 45.0f/100.0f;
     PARAMS.Attitude_Control.Pitch_Scale = 45.0f/100.0f;
-
-    /* -------- 锁定手势 -------- */
-    PARAMS.Lock.HoldTime        = 1000;
-    PARAMS.Lock.X_Threshold     = 80.0f;
-    PARAMS.Lock.Thro_Threshold  = 0.05f;
-
-    /* -------- 滤波器 -------- */
-    PARAMS.Filter.MAG_Weight           = 0.3f;
-    PARAMS.Filter.Acc_Norm_Threshold   = 0.001f;
-
-    /* -------- 气压计 -------- */
-    PARAMS.Baro.Calib_Threshold    = 1.0f;
 }

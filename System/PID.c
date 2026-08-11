@@ -98,6 +98,7 @@ void PID_Set_Paramaters(PID_Controller *PID,float Kp,float Ki,float Kd,float Int
 /*
 	PID计算
 	内外环PID控制
+	传入时间 ms
 */
 float PID_Calculate(PID_Controller *PID,uint8_t dt)
 {
@@ -121,7 +122,7 @@ float PID_Calculate(PID_Controller *PID,uint8_t dt)
 		PID ->ErrorInt = 0;
 	}
 	
-	PID ->Output = PID ->Kp*PID ->Error0 + PID ->Ki*PID ->ErrorInt + PID ->Kd*(PID ->Error0 - PID ->Error1)/dt;
+	PID ->Output = PID ->Kp*PID ->Error0 + PID ->Ki*PID ->ErrorInt + PID ->Kd*(PID ->Error0 - PID ->Error1)/dt/1000;
 	
 	if(PID ->Output >= PID ->Out_Limit)
 	{

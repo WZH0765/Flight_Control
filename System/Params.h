@@ -61,27 +61,6 @@ typedef struct
         float Pitch_Scale;
     } Attitude_Control;
 
-    /* -------- 锁定手势 -------- */
-    struct
-    {
-        uint16_t HoldTime;
-        float X_Thr;
-        float Throttle_Thr;
-    } Lock;
-
-    /* -------- 滤波器 -------- */
-    struct
-    {
-        float MAG_Weight;
-        float Acc_Norm_Threshold;
-    } Filter;
-
-    /* -------- 气压计 -------- */
-    struct
-    {
-        float Cal_Threshold;
-    } Baro;
-
 } params_t;
 
 extern params_t PARAMS;

@@ -42,7 +42,7 @@ void MAG_Init(void)
 	status |= MAG_ReadReg(MAG_ID_REG,&ID,1);
 	if(ID != MAG_ID)
     {
-        Error_Code.MAG_ReadID_Error = 1;
+        Error_Code.MAG_Error = 1;
         return ;
     }
 
@@ -55,7 +55,7 @@ void MAG_Init(void)
 	}
 	else
 	{
-		Error_Code.MAG_Config_Error = 1;
+		Error_Code.MAG_Error = 1;
 		return ;
 	}
 }
