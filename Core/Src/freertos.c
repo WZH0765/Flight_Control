@@ -1,20 +1,10 @@
 /* USER CODE BEGIN Header */
 /**
   ******************************************************************************
-  * File Name          : freertos.c
-  * Description        : Code for freertos applications
+  * Author          : 王子恒
+  * Description     : 飞控控制逻辑
   ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2026 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
+**/
 /* USER CODE END Header */
 
 /* Includes ------------------------------------------------------------------*/
@@ -35,6 +25,7 @@
 #include "semphr.h"
 #include "Filter.h"
 #include "Config.h"
+#include "Params.h"
 #include "usart.h"
 #include "Error.h"
 #include "fatfs.h"
@@ -54,16 +45,18 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-SemaphoreHandle_t xGPS_DataReady;     //GPS数据就绪信号
-SemaphoreHandle_t xIMU_DataReady;     //IMU数据就绪信号
-SemaphoreHandle_t xRC_DataReady;      //RC 数据就绪信号
+//数据就绪信号量
+SemaphoreHandle_t xGPS_DataReady;
+SemaphoreHandle_t xIMU_DataReady;
+SemaphoreHandle_t xRC_DataReady;
 
-QueueHandle_t     xLOG_DataQ;         //LOG数据队列
-QueueHandle_t     xGPS_DataQ;         //GPS数据队列
-QueueHandle_t     xIMU_DataQ;         //IMU数据队列
-QueueHandle_t     xMAG_DataQ;         //MAG数据队列
-QueueHandle_t     xBAR_DataQ;         //BAR数据队列
-QueueHandle_t     xRC_DataQ;          //RC 数据队列
+//数据队列
+QueueHandle_t     xLOG_DataQ;
+QueueHandle_t     xGPS_DataQ;
+QueueHandle_t     xIMU_DataQ;
+QueueHandle_t     xMAG_DataQ;
+QueueHandle_t     xBAR_DataQ;
+QueueHandle_t     xRC_DataQ;
 
 /* USER CODE END PTD */
 
@@ -86,6 +79,7 @@ rc_raw_t RcRaw = {0};
 
 float HeightCorr = 0;
 
+//超时计数器
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Gps_Timeout = 0;
 static uint16_t Imu_Timeout = 0;
@@ -174,6 +168,7 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */
 
+  //创建信号量
   xRC_DataReady  = xSemaphoreCreateBinary();
   xIMU_DataReady = xSemaphoreCreateBinary();
   xGPS_DataReady = xSemaphoreCreateBinary();
@@ -186,6 +181,7 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_QUEUES */
 
+  //创建队列
   xRC_DataQ  = xQueueCreate(1,sizeof(rc_data_t));
   xIMU_DataQ = xQueueCreate(1,sizeof(imu_raw_t));
   xMAG_DataQ = xQueueCreate(1,sizeof(mag_data_t));
@@ -307,8 +303,9 @@ void Sen_Read(void *argument)
 
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(10));    //10ms周期
-/***********GPS Data Read BEGIN***********/
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(SEN_READ_DT));
+
+//读取GPS数据并写入队列
     if(xSemaphoreTake(xGPS_DataReady,0) == pdTRUE)
     {
       Gps_Timeout = 0;
@@ -318,15 +315,14 @@ void Sen_Read(void *argument)
     else
     {
       Gps_Timeout ++;
-      if(Gps_Timeout > 500)                 //5秒无数据
+      if(Gps_Timeout > GPS_TIMEOUT_THRESHOLD)
       {
         Error_Code.GPS_Timeout_Error = 1;
       }
     }
-/************GPS Data Read END************/
 
-/***********MAG Data Read BEGIN***********/
-    if((++ Magcnt) >= 5)
+//读取磁力计数据并写入队列
+    if((++ Magcnt) >= MAG_READ_DT)
     {
       int result = MAG_Parse();
       if(result == MAG_OK)
@@ -336,7 +332,7 @@ void Sen_Read(void *argument)
       }
       else if(result == MAG_BUSY)
       {
-        if((++ Mag_Timeout) >= 20)
+        if((++ Mag_Timeout) >= MAG_TIMEOUT_THRESHOLD)
         {
           Error_Code.MAG_Timeout_Error = 1;
         }
@@ -347,10 +343,9 @@ void Sen_Read(void *argument)
       }
       Magcnt = 0;
     }
-/************MAG Data Read END************/
 
-/***********BAR Data Read BEGIN***********/
-    if((++ Barcnt) >= 2)
+//读取气压计数据并写入队列
+    if((++ Barcnt) >= BAR_READ_DT)
     {
       if(BAR_Read() == LPS22HH_OK)
       {
@@ -359,14 +354,14 @@ void Sen_Read(void *argument)
       }
       else
       {
-        if((++ Bar_Timeout) >= 50)
+        if((++ Bar_Timeout) >= BAR_TIMEOUT_THRESHOLD)
         {
           Error_Code.BAR_Timeout_Error = 1;
         }
       }
       Barcnt = 0;
     }
-/************BAR Data Read END************/
+
   }
   /* USER CODE END Sen_Read */
 }
@@ -397,47 +392,48 @@ void Pos_Estimate(void *argument)
 
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(20));  // 50Hz
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(POS_ESTI_DT));  // 50Hz
 
     if(xQueuePeek(xBAR_DataQ,&BarData,0) != pdTRUE) continue;
     if(Set_Ground == 0 && Sys_LockState.LockState == 1 && BarData.Height > 1.0f)
     {
+      Set_Ground    = 1;
       Target_Height = 0.0f;
-      Base_Height = BarData.Height;
-      Set_Ground = 1;
+      Base_Height   = BarData.Height;
     }
     if(Set_Ground == 0) continue;
 
     Actual_Height = BarData.Height - Base_Height;
     if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE)
     {
+      float Throttle = RcData.Throttle;
       //上升
-      if(RcData.Throttle > 0.55f && Target_Height < 50.0f)
+      if(Throttle > PARAMS.Height_Control.Deadzone_High && Target_Height < PARAMS.Height_Control.Max_Height)
       {
-        Target_Height += (RcData.Throttle - 0.5f)*0.3f;
+        Target_Height += (Throttle - 0.5f)*PARAMS.Height_Control.Target_Rate;
       }
       //下降
-      else if(RcData.Throttle < 0.45f && Target_Height > 0.0f)
+      else if (Throttle < PARAMS.Height_Control.Deadzone_Low && Target_Height > PARAMS.Height_Control.Min_Height)
       {
-        Target_Height += (RcData.Throttle - 0.5f)*0.3f;
+        Target_Height += (Throttle - 0.5f)*PARAMS.Height_Control.Target_Rate;
       }
       //保持
       else
       {
         Target_Height = Actual_Height;
       }
-      Target_Height = CLAMP(Target_Height,0,50);
+      Target_Height = CLAMP(Target_Height,PARAMS.Height_Control.Min_Height,PARAMS.Height_Control.Max_Height);
     }
 
     PID_Altitude.Target = Target_Height;
     PID_Altitude.Actual = Actual_Height;
-    float Target_Speed = PID_Calculate(&PID_Altitude,0.02f);
+    float Target_Speed = PID_Calculate(&PID_Altitude,POS_ESTI_DT);
 
     PID_Velocity.Target = Target_Speed;
     PID_Velocity.Actual = 0.0f;
-    HeightCorr = PID_Calculate(&PID_Velocity,0.02f);
+    HeightCorr = PID_Calculate(&PID_Velocity,POS_ESTI_DT);
 
-    HeightCorr = CLAMP(HeightCorr,-0.25,0.25);
+    HeightCorr = CLAMP(HeightCorr,-PARAMS.Velocity.OutLimit,PARAMS.Velocity.OutLimit);
   }
   /* USER CODE END Pos_Estimate */
 }
@@ -578,7 +574,7 @@ void Att_Control(void *argument)
     }
     else /*IMU数据异常处理*/
     {
-      if((++ Imu_Timeout) > 500)
+      if((++ Imu_Timeout) > IMU_TIMEOUT_THRESHOLD)
       {
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
         __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
@@ -612,7 +608,7 @@ void Rc_Parse(void *argument)
 
   for(;;)
   {
-    if(xSemaphoreTake(xRC_DataReady,pdMS_TO_TICKS(500)) == pdTRUE)
+    if(xSemaphoreTake(xRC_DataReady,pdMS_TO_TICKS(RC_PARSE_DT)) == pdTRUE)
     {
       Rc_Timeout = 0;
       Error_Code.RC_Timeout_Error = 0;
@@ -621,9 +617,10 @@ void Rc_Parse(void *argument)
 
       RcData.Throttle     = RcRaw.Left_Y/100.0f;
       RcData.TimeStamp    = xTaskGetTickCount();
-      RcData.Yaw_Target   = RcRaw.Left_X *YAW_SCALE  *RAD;
-      RcData.Roll_Target  = RcRaw.Right_X*ROLL_SCALE *RAD;
-      RcData.Pitch_Target = RcRaw.Right_Y*PITCH_SCALE*RAD;
+
+      RcData.Yaw_Target   = RcRaw.Left_X *PARAMS.Attitude_Control.Yaw_Scale  *RAD;
+      RcData.Roll_Target  = RcRaw.Right_X*PARAMS.Attitude_Control.Roll_Scale *RAD;
+      RcData.Pitch_Target = RcRaw.Right_Y*PARAMS.Attitude_Control.Pitch_Scale*RAD;
 
       Gesture.Left_X      = RcRaw.Left_X;
       Gesture.Right_X     = RcRaw.Right_X;
@@ -638,7 +635,7 @@ void Rc_Parse(void *argument)
     }
     else
     {
-      if((++ Rc_Timeout) > 5)
+      if((++ Rc_Timeout) > RC_TIMEOUT_THRESHOLD)
       {
         //上报超时错误
         Error_Code.RC_Timeout_Error = 1;
@@ -665,11 +662,10 @@ void Log_Write(void *argument)
   TickType_t xCurrentTime;
   TickType_t xLastSyncTime = xTaskGetTickCount();
 
-  /* Infinite loop */
   for(;;)
   {
     //从日志队列取数据
-    if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(100)) == pdTRUE)
+    if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(LOG_WRITE_DT)) == pdTRUE)
     {
       Log_Save(&LogData);
     }

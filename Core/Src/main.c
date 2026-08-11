@@ -38,6 +38,7 @@
 #include "semphr.h"
 #include "Filter.h"
 #include "Config.h"
+#include "Params.h"
 #include "Error.h"
 #include "Lock.h"
 #include "PID.h"
@@ -133,19 +134,21 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
-  // RC_Init();
-  // IMU_Init();
+  Params_Init();    //初始化所有参数
+
+  RC_Init();
+  IMU_Init();
   MAG_Init();
   GPS_Init();
-  // PID_Init();
-  // Log_Init();
-  // Lock_Init();
-  // Filter_Init(0.5f,0.01f);
+  PID_Init();
+  Log_Init();
+  Lock_Init();
+  Filter_Init(0.5f,0.01f);
 
-  // if(Log_Status.Ready)
-  // {
-  //   Log_Open();
-  // }
+  if(Log_Status.Ready)
+  {
+    Log_Open();
+  }
 
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_1);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_2);

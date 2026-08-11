@@ -7,10 +7,6 @@
 
 #define ACC_SCALE   9.80f/8192.0f     //m/s^2
 #define GYRO_SCALE  0.0174533f/32.8f
-
-#define YAW_SCALE   45.0f/100.0f
-#define ROLL_SCALE  45.0f/100.0f
-#define PITCH_SCALE 45.0f/100.0f
 /*****IMU define END*****/
 
 /****MAG define BEGIN****/
@@ -32,7 +28,7 @@
 #define PWM_MAX     2000
 
 #define PID_NORM    1.0f/50.0f
-#define ATT_CTRL_DT 0.001f
+
 
 #define PWM_RANGE   PWM_MAX - PWM_MIN
 /**CONTROL_TASK define END**/
@@ -60,3 +56,19 @@
 #define MAG_OK      0
 #define MAG_BUSY    1
 #define MAG_ERROR  -1
+
+//任务周期 DT
+#define SEN_READ_DT 10
+#define MAG_READ_DT 5
+#define BAR_READ_DT 2
+#define POS_ESTI_DT 20
+#define ATT_CTRL_DT 1
+#define RC_PARSE_DT 500
+#define LOG_WRITE_DT 100
+
+//传感器超时阈值
+#define RC_TIMEOUT_THRESHOLD  5
+#define IMU_TIMEOUT_THRESHOLD 500
+#define GPS_TIMEOUT_THRESHOLD 500
+#define MAG_TIMEOUT_THRESHOLD 20 
+#define BAR_TIMEOUT_THRESHOLD 50

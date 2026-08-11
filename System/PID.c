@@ -1,6 +1,8 @@
 #include "stm32h7xx.h"                  // Device header
 #include "PID.h"
 #include "math.h"
+#include "Params.h"
+#include <stdint.h>
 
 /*PID(内环)-角速度*/
 PID_Controller PID_Rate_Pitch;
@@ -20,20 +22,61 @@ PID_Controller PID_Altitude;
 
 void PID_Init(void)
 {
-	/*INNERLOOP INIT BEGIN*/
-	PID_Set_Paramaters(&PID_Rate_Pitch,0.8f,0.02f,0.05f,50.0f,50.0f);
-	PID_Set_Paramaters(&PID_Rate_Roll,0.8f,0.02f,0.05f,50.0f,50.0f);
-	PID_Set_Paramaters(&PID_Rate_Yaw,0.8f,0.02f,0.05f,50.0f,50.0f);
-	/*INNERLOOP INIT END*/
-	
-	/*OUTTERLOOP INIT BEGIN*/
-	PID_Set_Paramaters(&PID_Angle_Pitch,4.0f,0.0f,0.0f,80.0f,30.0f);
-	PID_Set_Paramaters(&PID_Angle_Roll,4.0f,0.0f,0.0f,80.0f,30.0f);
-	PID_Set_Paramaters(&PID_Angle_Yaw,4.0f,0.0f,0.0f,80.0f,30.0f);
-	/*OUTTERLOOP INIT END*/
+	PID_Set_Paramaters(&PID_Rate_Roll,
+        				PARAMS.Rate_Roll.Kp,
+        				PARAMS.Rate_Roll.Ki,
+       					PARAMS.Rate_Roll.Kd,
+        				PARAMS.Rate_Roll.IntLimit,
+        				PARAMS.Rate_Roll.OutLimit);
 
-	PID_Set_Paramaters(&PID_Altitude,1.5f,0.0f,0.0f,10.0f,5.0f);
-    PID_Set_Paramaters(&PID_Velocity,0.8f,0.0f,0.0f,5.0f,0.25f);
+    PID_Set_Paramaters(&PID_Rate_Pitch,
+        				PARAMS.Rate_Pitch.Kp,
+        				PARAMS.Rate_Pitch.Ki,
+						PARAMS.Rate_Pitch.Kd,
+						PARAMS.Rate_Pitch.IntLimit,
+						PARAMS.Rate_Pitch.OutLimit);
+
+    PID_Set_Paramaters(&PID_Rate_Yaw,
+						PARAMS.Rate_Yaw.Kp,
+						PARAMS.Rate_Yaw.Ki,
+						PARAMS.Rate_Yaw.Kd,
+						PARAMS.Rate_Yaw.IntLimit,
+						PARAMS.Rate_Yaw.OutLimit);
+
+    PID_Set_Paramaters(&PID_Angle_Roll,
+						PARAMS.Angle_Roll.Kp,
+						PARAMS.Angle_Roll.Ki,
+						PARAMS.Angle_Roll.Kd,
+						PARAMS.Angle_Roll.IntLimit,
+						PARAMS.Angle_Roll.OutLimit);
+	
+	PID_Set_Paramaters(&PID_Angle_Pitch,
+						PARAMS.Angle_Pitch.Kp,
+						PARAMS.Angle_Pitch.Ki,
+						PARAMS.Angle_Pitch.Kd,
+						PARAMS.Angle_Pitch.IntLimit,
+						PARAMS.Angle_Pitch.OutLimit);
+
+	PID_Set_Paramaters(&PID_Angle_Yaw,
+						PARAMS.Angle_Yaw.Kp,
+						PARAMS.Angle_Yaw.Ki,
+						PARAMS.Angle_Yaw.Kd,
+						PARAMS.Angle_Yaw.IntLimit,
+						PARAMS.Angle_Yaw.OutLimit);
+
+    PID_Set_Paramaters(&PID_Altitude,
+						PARAMS.Height.Kp,
+						PARAMS.Height.Ki,
+						PARAMS.Height.Kd,
+						PARAMS.Height.IntLimit,
+						PARAMS.Height.OutLimit);
+
+    PID_Set_Paramaters(&PID_Velocity,
+						PARAMS.Velocity.Kp,
+						PARAMS.Velocity.Ki,
+						PARAMS.Velocity.Kd,
+						PARAMS.Velocity.IntLimit,
+						PARAMS.Velocity.OutLimit);
 }
 
 /*设置PID参数值*/
@@ -56,13 +99,13 @@ void PID_Set_Paramaters(PID_Controller *PID,float Kp,float Ki,float Kd,float Int
 	PID计算
 	内外环PID控制
 */
-float PID_Calculate(PID_Controller *PID,float dt)
+float PID_Calculate(PID_Controller *PID,uint8_t dt)
 {
 	PID ->Error1 = PID ->Error0;					//更新上一次误差
 	PID ->Error0 = PID ->Target - PID ->Actual;		//写入当前误差
 	if(PID ->Ki != 0.0f)
 	{
-		PID ->ErrorInt += PID ->Error0*dt;
+		PID ->ErrorInt += PID ->Error0*dt/1000;
 		/*积分限幅*/
 		if(PID ->ErrorInt > PID ->Int_Limit)
 		{
