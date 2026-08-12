@@ -6,8 +6,6 @@
 
 void IMU_Init(void);
 
-/*DATA PROCESSED BEGIN*/
-
 //经过处理的数据
 typedef struct
 {
@@ -31,7 +29,6 @@ typedef struct
 
 extern inv_imu_device_t IMU;
 extern inv_imu_fifo_data_t FIFO_Data;
-/*DATA PROCESSED END*/
 
 static inline void Get_Angle(float ax,float ay,float az,float* roll,float* pitch)
 {

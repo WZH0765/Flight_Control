@@ -20,7 +20,7 @@ typedef struct
 	float  GroundSpeed;    //对地速度(m/s)
 	float  GroundCourse;   //对地航向(度,0-359.9)
 
-	uint32_t TimeStamp;    //数据更新时间(ms,由外部写入)
+	uint32_t TimeStamp;    //数据更新时间(ms)
 
 } gps_data_t;
 

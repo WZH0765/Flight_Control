@@ -21,7 +21,6 @@ void Log_Init(void)
     res = f_mount(&SDFatFS,SDPath,0);     //尝试挂载SD驱动器
     if(res != FR_OK)
     {
-        Error_Code.LOG_Mount_Error = 1;                  //挂载失败，置错误码
         return ;
     }
     Log_Status.Ready = 1;       //挂载成功
@@ -40,14 +39,11 @@ void Log_Save(const log_data_t *d)
 
     if(Log_Status.Ready == 0)
     {
-        Error_Code.LOG_Mount_Error = 1;      //置错误码
 
         return;
     }
     if(Log_Status.FileOpen == 0)
     {
-        Error_Code.LOG_Open_Error = 1;      //置错误码
-
         return;
     }
 
@@ -59,13 +55,11 @@ void Log_Save(const log_data_t *d)
         if(Log_Open() == 0)
         {
             Log_Status.FileOpen = 0;
-            Error_Code.LOG_Open_Error = 1;
-
             return;
         }
         else
         {
-            Error_Code.LOG_Open_Error = 0;
+
         }
     }
 
@@ -82,7 +76,6 @@ void Log_Save(const log_data_t *d)
     if(f_write(&Log_File,Log_Line,(UINT)n,&bw) != FR_OK || bw != (UINT)n)
     {
         Log_Close();
-        Error_Code.LOG_Write_Error = 1;
         
         return;
     }

@@ -9,8 +9,9 @@
 
 /* Includes ------------------------------------------------------------------*/
 #include "FreeRTOS.h"
+#include "EvtBus.h"
+#include "State.h"
 #include "projdefs.h"
-#include "state.h"
 #include "task.h"
 #include "main.h"
 #include "cmsis_os.h"
@@ -18,29 +19,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "inv_imu_driver.h"
-#include "Receiver.h"
-#include "lps22hh.h"
-#include <stdint.h>
-#include <string.h>
-#include "semphr.h"
-#include "Filter.h"
 #include "Config.h"
-#include "Params.h"
-#include "usart.h"
-#include "Error.h"
-#include "fatfs.h"
-#include "State.h"
-#include "iwdg.h"
-#include "Lock.h"
-#include "IMU.h"
-#include "BAR.h"
-#include "MAG.h"
-#include "GPS.h"
-#include "PID.h"
-#include "tim.h"
-#include "Log.h"
-#include "ff.h"
 
 /* USER CODE END Includes */
 
@@ -60,6 +39,9 @@ QueueHandle_t     xMAG_DataQ;
 QueueHandle_t     xBAR_DataQ;
 QueueHandle_t     xRC_DataQ;
 
+//事件队列
+QueueHandle_t     xEvent_Q;
+
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -71,13 +53,7 @@ QueueHandle_t     xRC_DataQ;
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
 
-#define MOTOR_STOP() do\
-{\
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN); \
-} while(0)
+
 
 /* USER CODE END PM */
 
@@ -197,6 +173,7 @@ void MX_FREERTOS_Init(void) {
   xGPS_DataQ = xQueueCreate(1,sizeof(gps_data_t));
   xBAR_DataQ = xQueueCreate(1,sizeof(bar_data_t));
   xLOG_DataQ = xQueueCreate(256,sizeof(log_data_t));
+  xEvent_Q   = xQueueCreate(16,sizeof(evt_publish_t));
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -253,8 +230,6 @@ void Imu_Read(void *argument)
     int32_t GyroSum[3] = {0};
 
     xSemaphoreTake(xIMU_DataReady,portMAX_DELAY);
-
-    //获取字节
     inv_imu_get_frame_count(&IMU,&Cnt);
 
     //转换为帧
@@ -278,7 +253,6 @@ void Imu_Read(void *argument)
       GyroSum[2] += FIFO_Data.byte_16.gyro_data[2];
     }
 
-    //更新原数
     ImuRaw.Acc[0] = AccSum[0]/Cnt;
     ImuRaw.Acc[1] = AccSum[1]/Cnt;
     ImuRaw.Acc[2] = AccSum[2]/Cnt;
@@ -319,13 +293,14 @@ void Sen_Read(void *argument)
       Gps_Timeout = 0;
       GPS_Parse(GPS_RxBuffer,GPS_RxLength);
       GPS_Init();
+      //Gps数据ready 发布至事件总线
+      EvtBus_Publish(&(evt_publish_t){.ID = EVT_GPS_DATA_READY});
     }
     else
     {
-      Gps_Timeout ++;
-      if(Gps_Timeout > GPS_TIMEOUT_THRESHOLD)
+      if((++ Gps_Timeout) > GPS_TIMEOUT_THRESHOLD)
       {
-        Error_Code.GPS_Error = 1;
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_GPS_ERROR});
       }
     }
 
@@ -336,18 +311,19 @@ void Sen_Read(void *argument)
       if(result == MAG_OK)
       {
         Mag_Timeout = 0;
-        Error_Code.MAG_Error = 0;
+        //Mag数据ready 发布至事件总线
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_DATA_READY});
       }
       else if(result == MAG_BUSY)
       {
         if((++ Mag_Timeout) >= MAG_TIMEOUT_THRESHOLD)
         {
-          Error_Code.MAG_Error = 1;
+          EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_ERROR});
         }
       }
       else
       {
-        Error_Code.MAG_Error = 1;
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_ERROR});
       }
       Magcnt = 0;
     }
@@ -358,13 +334,14 @@ void Sen_Read(void *argument)
       if(BAR_Read() == LPS22HH_OK)
       {
         Bar_Timeout = 0;
-        Error_Code.BAR_Error = 0;
+        //Bar数据ready 发布至事件总线
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_BAR_DATA_READY});
       }
       else
       {
         if((++ Bar_Timeout) >= BAR_TIMEOUT_THRESHOLD)
         {
-          Error_Code.BAR_Error = 1;
+          EvtBus_Publish(&(evt_publish_t){.ID = EVT_BAR_ERROR});
         }
       }
       Barcnt = 0;
@@ -388,80 +365,38 @@ void Pos_Estimate(void *argument)
   /* USER CODE BEGIN Pos_Estimate */
   (void)argument;
 
-  rc_data_t  RcData;
-  bar_data_t BarData;
-  fc_state_t CurrentState;
+  rc_data_t  RcData  = {0};
+  bar_data_t BarData = {0};
+  state_t    CurrentState;
 
-  float HomeAlt    = 0.0f;    //基准高度（绝对）
   float TargetAlt  = 0.0f;    //目标高度（相对）
   float CurrentAlt = 0.0f;    //当前高度（相对）
-
-  uint8_t HomeSet  = 0;       //是否完成校准
 
   TickType_t xLastWakeTime = xTaskGetTickCount();
 
   for(;;)
   {
     vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(POS_ESTI_DT));
-
     if(xQueuePeek(xBAR_DataQ,&BarData,0) != pdTRUE) continue;
 
-    CurrentState = FC_GetState();
+    CurrentAlt = BarData.Height - Result.HomeAlt;
 
-    if(HomeSet == 0 && CurrentState == STATE_CALIB)
-    {
-      float Sum = 0.0f;
-      uint8_t j = 0;
-      
-      for(int i = 0; i < 50; i++)
-      {
-        if(xQueuePeek(xBAR_DataQ, &BarData, 0) == pdTRUE)
-        {
-          Sum += BarData.Height;
-          j++;
-        }
-        vTaskDelay(pdMS_TO_TICKS(5));
-      }
-      if(j > 0)
-      {
-        HomeAlt = Sum / j;
-        HomeSet = 1;
-        FC_HandleEvent(EVENT_CALIB_DONE);
-      }
-      else
-      {
-        HomeSet = 0;
-      }
-    }
-    if(HomeSet == 1)
-    {
-      if (xQueuePeek(xBAR_DataQ, &BarData, 0) == pdTRUE)
-      {
-        CurrentAlt = BarData.Height - HomeAlt;
-      }
-    }
-
+    CurrentState = Get_CurrentState();
     if(CurrentState == STATE_FLYING)
     {
       if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE)
       {
-        float Throttle = RcData.Throttle;
+        float Throttle = RcData.Throttle - 0.5f;
         //上升
-        if(Throttle > PARAMS.Height_Control.Deadzone_High && TargetAlt < PARAMS.Height_Control.Max_Height)
+        if((RcData.Throttle > PARAMS.Height_Control.Deadzone_High || RcData.Throttle < PARAMS.Height_Control.Deadzone_Low) && TargetAlt >= PARAMS.Height_Control.Min_Height && TargetAlt <= PARAMS.Height_Control.Max_Height)
         {
-          TargetAlt += (Throttle - 0.5f) * PARAMS.Height_Control.Target_Rate;
+          TargetAlt += Throttle*PARAMS.Height_Control.Target_Rate;
         }
-        //下降
-        else if(Throttle < PARAMS.Height_Control.Deadzone_Low && TargetAlt > PARAMS.Height_Control.Min_Height)
-        {
-          TargetAlt += (Throttle - 0.5f) * PARAMS.Height_Control.Target_Rate;
-        }
-        //保持
         else
         {
           TargetAlt = CurrentAlt;
         }
-        TargetAlt = CLAMP(TargetAlt,PARAMS.Height_Control.Min_Height,PARAMS.Height_Control.Max_Height);
+        TargetAlt = CLAMP(TargetAlt, PARAMS.Height_Control.Min_Height, PARAMS.Height_Control.Max_Height);
       }
 
       PID_Altitude.Target = TargetAlt;
@@ -498,7 +433,6 @@ void Att_Control(void *argument)
   imu_raw_t  ImuRaw  = {0};     //IMU原始数据
   imu_data_t ImuData = {0};     //IMU缩放数据
   mag_data_t MagData = {0};     //MAG缩放数据
-  fc_state_t CurrentState ;
 
   TickType_t xCurrentTime;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //上次任务唤醒时刻
@@ -509,126 +443,111 @@ void Att_Control(void *argument)
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1));
     xCurrentTime = xTaskGetTickCount();
 
-    //获取当前飞控状态
-    CurrentState = FC_GetState();
-
-    switch(CurrentState)
+    if(Get_CurrentState() == STATE_FLYING)      //正常飞行中
     {
-      case STATE_FLYING:      //正常飞行中
+      if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)       //获取IMU数据
       {
-        if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)       //获取IMU数据
+        Imu_Timeout = 0;
+
+        //原始数据缩放为物理量
+        ImuData.Ax = ImuRaw.Acc[0]*ACC_SCALE;
+        ImuData.Ay = ImuRaw.Acc[1]*ACC_SCALE;
+        ImuData.Az = ImuRaw.Acc[2]*ACC_SCALE;
+
+        ImuData.Gx = ImuRaw.Gyro[0]*GYRO_SCALE;
+        ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
+        ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
+
+        if(xQueuePeek(xMAG_DataQ,&MagData,0) != pdTRUE)      //获取MAG数据
         {
-          Imu_Timeout = 0;
+          MagData.Mx = 0.0f;
+          MagData.My = 0.0f;
+          MagData.Mz = 0.0f;
+        }
 
-          //原始数据缩放为物理量
-          ImuData.Ax = ImuRaw.Acc[0]*ACC_SCALE;
-          ImuData.Ay = ImuRaw.Acc[1]*ACC_SCALE;
-          ImuData.Az = ImuRaw.Acc[2]*ACC_SCALE;
+        //姿态解算
+        Filter_Update(ImuData.Ax, ImuData.Ay, ImuData.Az,
+                      ImuData.Gx, ImuData.Gy, ImuData.Gz,
+                      MagData.Mx, MagData.My, MagData.Mz,
+                      ATT_CTRL_DT);
 
-          ImuData.Gx = ImuRaw.Gyro[0]*GYRO_SCALE;
-          ImuData.Gy = ImuRaw.Gyro[1]*GYRO_SCALE;
-          ImuData.Gz = ImuRaw.Gyro[2]*GYRO_SCALE;
+        /** 获取RC数据并校验时效 **/
+        if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
+        {
+          /*** 外环：角度PID ***/
+          PID_Angle_Yaw.Target   = RcData.Yaw_Target;
+          PID_Angle_Yaw.Actual   = Att.Yaw;
+          float Rate_Yaw_Target  = PID_Calculate(&PID_Angle_Yaw, ATT_CTRL_DT);
 
-          if(xQueuePeek(xMAG_DataQ,&MagData,0) != pdTRUE)      //获取MAG数据
-          {
-            MagData.Mx = 0.0f;
-            MagData.My = 0.0f;
-            MagData.Mz = 0.0f;
-          }
+          PID_Angle_Roll.Target  = RcData.Roll_Target;
+          PID_Angle_Roll.Actual  = Att.Roll;
+          float Rate_Roll_Target = PID_Calculate(&PID_Angle_Roll, ATT_CTRL_DT);
 
-          //姿态解算
-          Filter_Update(ImuData.Ax, ImuData.Ay, ImuData.Az,
-                        ImuData.Gx, ImuData.Gy, ImuData.Gz,
-                        MagData.Mx, MagData.My, MagData.Mz,
-                        ATT_CTRL_DT);
+          PID_Angle_Pitch.Target = RcData.Pitch_Target;
+          PID_Angle_Pitch.Actual = Att.Pitch;
+          float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch, ATT_CTRL_DT);
 
-          /** 获取RC数据并校验时效 **/
-          if(xQueuePeek(xRC_DataQ,&RcData,0) == pdTRUE && (xCurrentTime - RcData.TimeStamp) < pdMS_TO_TICKS(200))
-          {
-            /*** 外环：角度PID ***/
-            PID_Angle_Yaw.Target   = RcData.Yaw_Target;
-            PID_Angle_Yaw.Actual   = Att.Yaw;
-            float Rate_Yaw_Target  = PID_Calculate(&PID_Angle_Yaw, ATT_CTRL_DT);
+          /*** 内环：角速度PID ***/
+          PID_Rate_Yaw.Target    = Rate_Yaw_Target;
+          PID_Rate_Yaw.Actual    = ImuData.Gz;
+          float Out_Yaw          = PID_Calculate(&PID_Rate_Yaw, ATT_CTRL_DT);
 
-            PID_Angle_Roll.Target  = RcData.Roll_Target;
-            PID_Angle_Roll.Actual  = Att.Roll;
-            float Rate_Roll_Target = PID_Calculate(&PID_Angle_Roll, ATT_CTRL_DT);
+          PID_Rate_Roll.Target   = Rate_Roll_Target;
+          PID_Rate_Roll.Actual   = ImuData.Gx;
+          float Out_Roll         = PID_Calculate(&PID_Rate_Roll, ATT_CTRL_DT);
 
-            PID_Angle_Pitch.Target = RcData.Pitch_Target;
-            PID_Angle_Pitch.Actual = Att.Pitch;
-            float Rate_Pitch_Target = PID_Calculate(&PID_Angle_Pitch, ATT_CTRL_DT);
+          PID_Rate_Pitch.Target  = Rate_Pitch_Target;
+          PID_Rate_Pitch.Actual  = ImuData.Gy;
+          float Out_Pitch        = PID_Calculate(&PID_Rate_Pitch, ATT_CTRL_DT);
 
-            /*** 内环：角速度PID ***/
-            PID_Rate_Yaw.Target    = Rate_Yaw_Target;
-            PID_Rate_Yaw.Actual    = ImuData.Gz;
-            float Out_Yaw          = PID_Calculate(&PID_Rate_Yaw, ATT_CTRL_DT);
+          //应用高度修正，得到最终油门
+          float Throttle = CLAMP(RcData.Throttle + HeightCorr,0.0f,1.0f);
+          float BasePwm  = PWM_MIN + Throttle * PWM_RANGE;
+          float BaseCorr = 0.5f * Throttle * PWM_RANGE;
 
-            PID_Rate_Roll.Target   = Rate_Roll_Target;
-            PID_Rate_Roll.Actual   = ImuData.Gx;
-            float Out_Roll         = PID_Calculate(&PID_Rate_Roll, ATT_CTRL_DT);
+          //X型四轴混控
+          float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M2_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
+          float M3_Corr = ( Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
+          float M4_Corr = (-Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
 
-            PID_Rate_Pitch.Target  = Rate_Pitch_Target;
-            PID_Rate_Pitch.Actual  = ImuData.Gy;
-            float Out_Pitch        = PID_Calculate(&PID_Rate_Pitch, ATT_CTRL_DT);
+          uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
+          uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
+          uint16_t Pwm3 = (uint16_t)(BasePwm + M3_Corr);
+          uint16_t Pwm4 = (uint16_t)(BasePwm + M4_Corr);
 
-            //应用高度修正，得到最终油门
-            float Throttle = CLAMP(RcData.Throttle + HeightCorr,0.0f,1.0f);
-            float BasePwm  = PWM_MIN + Throttle * PWM_RANGE;
-            float BaseCorr = 0.5f * Throttle * PWM_RANGE;
-
-            //X型四轴混控
-            float M1_Corr = ( Out_Roll + Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
-            float M2_Corr = (-Out_Roll + Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-            float M3_Corr = ( Out_Roll - Out_Pitch - Out_Yaw)*BaseCorr*PID_NORM;
-            float M4_Corr = (-Out_Roll - Out_Pitch + Out_Yaw)*BaseCorr*PID_NORM;
-
-            uint16_t Pwm1 = (uint16_t)(BasePwm + M1_Corr);
-            uint16_t Pwm2 = (uint16_t)(BasePwm + M2_Corr);
-            uint16_t Pwm3 = (uint16_t)(BasePwm + M3_Corr);
-            uint16_t Pwm4 = (uint16_t)(BasePwm + M4_Corr);
-
-            //钳位输出
-            __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,CLAMP(Pwm1,PWM_MIN,PWM_MAX));
-            __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,CLAMP(Pwm2,PWM_MIN,PWM_MAX));
-            __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,CLAMP(Pwm3,PWM_MIN,PWM_MAX));
-            __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
-          }
-          else
-          {
-            //RC 数据无效
-            MOTOR_STOP();
-
-            PID_Rate_Yaw.ErrorInt   = 0.0f;
-            PID_Rate_Roll.ErrorInt  = 0.0f;
-            PID_Rate_Pitch.ErrorInt = 0.0f;
-
-            PID_Angle_Roll.ErrorInt = 0.0f;
-            PID_Angle_Pitch.ErrorInt= 0.0f;
-          }
+          //钳位输出
+          __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,CLAMP(Pwm1,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,CLAMP(Pwm2,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,CLAMP(Pwm3,PWM_MIN,PWM_MAX));
+          __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,CLAMP(Pwm4,PWM_MIN,PWM_MAX));
         }
         else
         {
-          //IMU数据超时
-          if((++ Imu_Timeout) > IMU_TIMEOUT_THRESHOLD)
-          {
-            FC_HandleEvent(EVENT_IMU_ERROR);
-          }
+          //RC 数据无效
+          MOTOR_STOP();
+
+          PID_Rate_Yaw.ErrorInt   = 0.0f;
+          PID_Rate_Roll.ErrorInt  = 0.0f;
+          PID_Rate_Pitch.ErrorInt = 0.0f;
+
+          PID_Angle_Roll.ErrorInt = 0.0f;
+          PID_Angle_Pitch.ErrorInt= 0.0f;
         }
-        break;
       }
-      case STATE_DISARMED:
-        MOTOR_STOP();
-        break;
-      case STATE_ARMED:
-        MOTOR_STOP();
-        break;
-      case STATE_EMERGENCY:
-        MOTOR_STOP();
-        vTaskSuspend(NULL);
-        break;
-      default:
-        MOTOR_STOP();
-        break;
+      else
+      {
+        //IMU数据超时
+        if((++ Imu_Timeout) > IMU_TIMEOUT_THRESHOLD)
+        {
+          EvtBus_Publish(&(evt_publish_t){.ID = EVT_IMU_ERROR});
+          Imu_Timeout = 0;
+        }
+      }
+    }
+    else
+    {
+      MOTOR_STOP();
     }
     //喂狗
     HAL_IWDG_Refresh(&hiwdg1);
@@ -655,7 +574,6 @@ void Rc_Parse(void *argument)
     if(xSemaphoreTake(xRC_DataReady,pdMS_TO_TICKS(RC_PARSE_DT)) == pdTRUE)
     {
       Rc_Timeout = 0;
-      Error_Code.RC_Timeout_Error = 0;
 
       RC_Parse(RC_RxBuffer,RC_RxLength,&RcRaw);
 
@@ -669,14 +587,13 @@ void Rc_Parse(void *argument)
       //外八
       if(RcRaw.Left_X > LOCK_X_THRESHOLD && RcRaw.Right_X < -LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_THRO_THRESHOLD)
       {
-        FC_HandleEvent(EVENT_ARM_GESTURE);
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_ARM_GESTURE});
       }
       //内八
       if(RcRaw.Left_X < -LOCK_X_THRESHOLD && RcRaw.Right_X > LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_THRO_THRESHOLD)
       {
-        FC_HandleEvent(EVENT_DISARM_GESTURE);
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_DISARM_GESTURE});
       }
-      Lock_Update();
 
       xQueueOverwrite(xRC_DataQ,&RcData);
       RC_Init();
@@ -685,8 +602,8 @@ void Rc_Parse(void *argument)
     {
       if((++ Rc_Timeout) > RC_TIMEOUT_THRESHOLD)
       {
-        //上报超时错误
-        Error_Code.RC_Timeout_Error = 1;
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_RC_LOST});
+        Rc_Timeout = 0;
       }
     }
   }
@@ -700,181 +617,13 @@ void Rc_Parse(void *argument)
 * @retval None
 */
 /* USER CODE END Header_Log_Write */
-void Log_Write(void *argument)
-{
-  /* USER CODE BEGIN Log_Write */
-  (void)argument;
-
-  log_data_t LogData;
-
-  TickType_t xCurrentTime;
-  TickType_t xLastSyncTime = xTaskGetTickCount();
-
-  for(;;)
-  {
-    //从日志队列取数据
-    if(xQueueReceive(xLOG_DataQ,&LogData,pdMS_TO_TICKS(LOG_WRITE_DT)) == pdTRUE)
-    {
-      Log_Save(&LogData);
-    }
-
-    xCurrentTime = xTaskGetTickCount();
-    //自动同步
-    if(xCurrentTime - xLastSyncTime >= pdMS_TO_TICKS(5000))
-    {
-      Log_Sync();
-      xLastSyncTime = xCurrentTime;
-    }
-  }
-  /* USER CODE END Log_Write */
-}
-
-/* USER CODE BEGIN Header_Sys_Observe */
-/**
-* @brief  系统错误处理函数
-* @param  argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_Sys_Observe */
 void Sys_Observe(void *argument)
 {
   /* USER CODE BEGIN Sys_Observe */
   (void)argument;
   
   for(;;)
-  {
-//GPS超时错误 恢复机制
-    if(Error_Code.GPS_Error == 1)
-    {
-      static uint16_t cnt = 0;
-
-      if((++ cnt)%1000 == 0)
-      {
-        Reset_USART(&huart3);    //尝试重启
-        GPS_Init();
-        
-        HW_LockState.GPS_Unlock = 0;
-        if(HW_LockState.GPS_Unlock == 1)
-        {
-          cnt = 0;
-          Error_Code.GPS_Error = 0;
-        }
-      }
-    }
-
-//MAG超时错误 恢复机制
-    if(Error_Code.MAG_Error == 1)
-    {
-      static uint16_t cnt = 0;
-      if((++cnt)%50 == 0)
-      {
-        MAG_Init();
-        if(HW_LockState.MAG_Unlock == 1)
-        {
-          cnt = 0;
-          Error_Code.MAG_Error = 0;
-        }
-      }
-    }
-
-//BAR超时错误 恢复机制
-    if (Error_Code.BAR_Error == 1)
-    {
-      static uint16_t cnt = 0;
-      if ((++cnt) % 50 == 0)
-      {
-        BAR_Init();
-        if (HW_LockState.BAR_Unlock == 1)
-        {
-          cnt = 0;
-          Error_Code.BAR_Error = 0;
-        }
-      }
-    }
-
-    if(Error_Code.RC_Timeout_Error == 1)
-    {
-      static uint16_t cnt = 0;
-
-      if((++cnt)%500 == 0)
-      {
-        Reset_USART(&huart2);
-        RC_Init();
-        
-        if((cnt/500) > 100)
-        {
-          //警报
-        }
-      }
-    }
-
-    /*SD卡挂载错误,尝试重启*/
-    if(Error_Code.LOG_Mount_Error == 1 && Giveup_Code.LOG_Mount_Giveup == 0)
-    {
-      static uint16_t cnt = 0;
-
-      if((++ cnt)%500 == 0)
-      {
-        FRESULT res = f_mount(&SDFatFS,SDPath,1);
-        if(res == FR_OK)
-        {
-          cnt = 0;
-          Log_Status.Ready = 1;
-          Error_Code.LOG_Mount_Error = 0;
-
-          //尝试打开日志文件
-          if(Log_Open() == 0)
-          {
-            Error_Code.LOG_Open_Error = 1;
-          }
-        }
-        //多次失败
-        else if((cnt/500) > 20)
-        {
-          Giveup_Code.LOG_Mount_Giveup = 1;
-        }
-      }
-    }
-    /*日志打开错误,尝试重启*/
-    if(Error_Code.LOG_Open_Error == 1 && Giveup_Code.LOG_Open_Giveup == 0)
-    {
-      static uint16_t cnt = 0;
-
-      if((++ cnt)%50 == 0)
-      {
-        if(Log_Status.Ready && Log_Open())
-        {
-          cnt = 0;
-          Error_Code.LOG_Open_Error = 0;
-          Giveup_Code.LOG_Open_Giveup = 0;
-        }
-        //多次失败
-        else if(cnt/50 > 150)
-        {
-          Giveup_Code.LOG_Open_Giveup = 1;
-        }
-      }
-    }
-    /*日志写入错误,尝试重启*/
-    if(Error_Code.LOG_Write_Error == 1 && Giveup_Code.LOG_Write_Giveup == 0)
-    {
-      static uint16_t cnt = 0;
-      if((++ cnt)%50 == 0)
-      {
-        if(Log_Status.Ready && Log_Open() == 1)
-        {
-          cnt = 0;
-          Error_Code.LOG_Write_Error = 0;
-          Giveup_Code.LOG_Write_Giveup = 0;
-        }
-        //多次失败
-        else if(cnt/50 > 100)
-        {
-          Giveup_Code.LOG_Write_Giveup = 1;
-        }
-      }
-    }
-    
+  { 
     osDelay(10);
   }
   /* USER CODE END Sys_Observe */

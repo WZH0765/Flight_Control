@@ -48,17 +48,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 file(GLOB_RECURSE USER_SOURCES
     ${CMAKE_CURRENT_SOURCE_DIR}/System/*.c
     ${CMAKE_CURRENT_SOURCE_DIR}/Hardware/*.c
+    ${CMAKE_CURRENT_SOURCE_DIR}/EventBus/*.c
 )
 
 # 添加源文件到可执行文件
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
-    ${USER_SOURCES}   # ← 这里用变量
+    ${USER_SOURCES}
 )
 
-# 添加头文件路径（去掉重复）
+# 添加头文件路径
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/System
     ${CMAKE_CURRENT_SOURCE_DIR}/Hardware
+    ${CMAKE_CURRENT_SOURCE_DIR}/EventBus
 )
 
 # Add project symbols (macros)

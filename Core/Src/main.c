@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "State.h"
 #include "cmsis_os.h"
 #include "dma.h"
 #include "fatfs.h"
@@ -35,26 +36,14 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
-#include "FreeRTOS.h"
-#include "Receiver.h"
-#include "semphr.h"
-#include "Filter.h"
 #include "Config.h"
-#include "Params.h"
-#include "Error.h"
-#include "Lock.h"
-#include "PID.h"
-#include "IMU.h"
-#include "MAG.h"
-#include "GPS.h"
-#include "Log.h"
-#include <stdint.h>
 
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
+extern SemaphoreHandle_t xIMU_DataReady;
 extern SemaphoreHandle_t xGPS_DataReady;
 extern SemaphoreHandle_t xRC_DataReady;
 
@@ -136,8 +125,9 @@ int main(void)
   MX_I2C2_Init();
   /* USER CODE BEGIN 2 */
 
-  FC_InitState();   //初始化状态机
+  EvtBus_Init();
   Params_Init();    //初始化所有参数
+  StateMachine_Init();
 
   RC_Init();
   IMU_Init();
@@ -145,7 +135,6 @@ int main(void)
   GPS_Init();
   PID_Init();
   Log_Init();
-  Lock_Init();
   Filter_Init(0.5f,0.01f);
 
   if(Log_Status.Ready)
@@ -158,12 +147,6 @@ int main(void)
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_3);
   HAL_TIM_PWM_Start(&htim1,TIM_CHANNEL_4);
   __HAL_TIM_MOE_ENABLE(&htim1);
-
-  HAL_Delay(5000);
-  if(HW_Unlock() == 1)
-  {
-    FC_HandleEvent(EVENT_INIT_DONE);
-  }
 
   /* USER CODE END 2 */
 
@@ -267,12 +250,22 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart,uint16_t Size)
   if(huart == &huart3)
 	{
 		GPS_RxLength = Size;
-    HW_LockState.GPS_Unlock = 1;
 
 		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     xSemaphoreGiveFromISR(xGPS_DataReady,&xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+	}
+}
+
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+	if(GPIO_Pin == IMU_INT1_Pin)
+	{
+		BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    
+		xSemaphoreGiveFromISR(xIMU_DataReady,&xHigherPriorityTaskWoken);
+		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
 	}
 }
 

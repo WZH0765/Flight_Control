@@ -1,12 +1,6 @@
-#include "FreeRTOSConfig.h"
-#include "cmsis_os2.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
 #include "Config.h"
-#include "Error.h"
-#include "Lock.h"
-#include "MAG.h"
-#include "i2c.h"
+#include "EvtBus.h"
+#include "HwState.h"
 
 /*
 *	值得注意的是，H7 硬件I2C需要配置GPIO为 pull up和very high
@@ -42,7 +36,8 @@ void MAG_Init(void)
 	status |= MAG_ReadReg(MAG_ID_REG,&ID,1);
 	if(ID != MAG_ID)
     {
-        Error_Code.MAG_Error = 1;
+		HW_SetUnready(HW_MAG);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_ERROR});
         return ;
     }
 
@@ -51,11 +46,13 @@ void MAG_Init(void)
 
     if(status == MAG_OK)
 	{
-		HW_LockState.MAG_Unlock = 1;
+		HW_SetReady(HW_MAG);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_READY});
 	}
 	else
 	{
-		Error_Code.MAG_Error = 1;
+		HW_SetUnready(HW_MAG);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_ERROR});
 		return ;
 	}
 }

@@ -1,6 +1,38 @@
 /*
   X型四轴电机:M1前左,M2前右,M3后左,M4后右
 */
+#ifndef _CONFIG_H
+#define _CONFIG_H
+
+#include "inv_imu_driver.h"
+#include "FreeRTOS.h"
+#include "HwState.h"
+#include "Receiver.h"
+#include "lps22hh.h"
+#include <stdbool.h>
+#include <stdint.h>
+#include <string.h>
+#include "semphr.h"
+#include "Filter.h"
+#include "EvtBus.h"
+#include "Params.h"
+#include "EvtBus.h"
+#include "State.h"
+#include "usart.h"
+#include "Error.h"
+#include "fatfs.h"
+#include "Calib.h"
+#include "iwdg.h"
+#include "IMU.h"
+#include "BAR.h"
+#include "MAG.h"
+#include "GPS.h"
+#include "PID.h"
+#include "tim.h"
+#include "Log.h"
+#include "i2c.h"
+#include "spi.h"
+#include "ff.h"
 
 /****IMU define BEGIN****/
 #define RAD         0.0174533f
@@ -76,3 +108,13 @@
 #define GPS_TIMEOUT_THRESHOLD 500
 #define MAG_TIMEOUT_THRESHOLD 20 
 #define BAR_TIMEOUT_THRESHOLD 50
+
+#define MOTOR_STOP() do\
+{\
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN); \
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN); \
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN); \
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN); \
+} while(0)
+
+#endif

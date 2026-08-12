@@ -1,16 +1,7 @@
-#include "main.h"
-#include "state.h"
-#include "stm32h7xx.h"                  // Device header
-#include "inv_imu_driver.h"
-#include "FreeRTOS.h"
-#include "semphr.h"
-#include "State.h"
-#include "stdio.h"
-#include "Lock.h"
-#include "IMU.h"
-#include "SPI.h"
+#include "Config.h"
+#include "EvtBus.h"
+#include "HwState.h"
 
-#define INT1
 #define MAX_LEN 96
 
 /*底层写入函数*/
@@ -56,7 +47,7 @@ static void IMU_Sleep(uint32_t us)
 	{
         if(xTaskGetSchedulerState() == taskSCHEDULER_RUNNING)
 		{
-            //至少让出 1ms，虽然实际延时变长，但保证了实时任务不被阻塞
+            //让出1ms,保证实时任务不被阻塞
             vTaskDelay(pdMS_TO_TICKS(1));
             return;
         }
@@ -92,7 +83,8 @@ void IMU_Init(void)
 	inv_imu_get_who_am_i(&IMU,&ID);
 	if(ID != INV_IMU_WHOAMI)
 	{
-		FC_HandleEvent(EVENT_IMU_ERROR);
+		HW_SetUnready(HW_IMU);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_IMU_ERROR});
 		return ;
 	}
 
@@ -122,7 +114,6 @@ void IMU_Init(void)
 	status |= inv_imu_set_fifo_config(&IMU,&FIFO_Config);
 	/*FIFO Config_END*/
 	
-#ifdef INT1
 	/*INT1 Config_BEGIN*/
 	inv_imu_int_pin_config_t PIN1_Config =
 	{
@@ -138,29 +129,16 @@ void IMU_Init(void)
 	
 	status |= inv_imu_set_config_int(&IMU,INV_IMU_INT1,&INT1_Config);
 	/*INT1 Config_END*/
-#endif
 	
 	if(status == INV_IMU_OK)
 	{
-		HW_LockState.IMU_Unlock = 1;
+		HW_SetReady(HW_IMU);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_IMU_READY});
 	}
 	else
 	{
-		FC_HandleEvent(EVENT_IMU_ERROR);
+		HW_SetUnready(HW_IMU);
+		EvtBus_Publish(&(evt_publish_t){.ID = EVT_IMU_ERROR});
 		return ;
 	}
 }
-
-#ifdef INT1
-/*陀螺仪中断回调函数*/
-void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
-{
-	/*FIFO满中断*/
-	if(GPIO_Pin == IMU_INT1_Pin)
-	{
-		BaseType_t xHigherPriorityTaskWoken = pdFALSE;						//高优先级任务信号量
-		xSemaphoreGiveFromISR(xIMU_DataReady,&xHigherPriorityTaskWoken);	//唤醒Task_IMU_Rd任务
-		portYIELD_FROM_ISR(xHigherPriorityTaskWoken);						//高优先级任务被唤醒
-	}
-}
-#endif

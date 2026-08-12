@@ -1,12 +1,6 @@
-#include "lps22hh_reg.h"
-#include "FreeRTOS.h"
-#include "lps22hh.h"
-#include "Error.h"
-#include "Lock.h"
-#include "task.h"
-#include "BAR.h"
-#include "i2c.h"
-#include <stdint.h>
+#include "Config.h"
+#include "EvtBus.h"
+#include "HwState.h"
 
 /*底层写入函数*/
 static int32_t BAR_WriteReg(uint16_t DevAddr,uint16_t Reg,uint8_t *pData,uint16_t Len)
@@ -64,7 +58,8 @@ void BAR_Init(void)
     LPS22HH_ReadID(&BAR,&ID);
     if(ID != LPS22HH_ID)
     {
-        Error_Code.BAR_Error = 1;
+        HW_SetUnready(HW_BAR);
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_BAR_ERROR});
     }
 
     status |= lps22hh_lp_bandwidth_set(&BAR.Ctx,LPS22HH_LPF_ODR_DIV_9);
@@ -73,11 +68,13 @@ void BAR_Init(void)
 
     if(status == LPS22HH_OK)
     {
-        HW_LockState.BAR_Unlock = 1;
+        HW_SetReady(HW_BAR);
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_BAR_READY});
     }
     else
     {
-        Error_Code.BAR_Error = 1;
+        HW_SetUnready(HW_BAR);
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_BAR_ERROR});
         return;
     }
 }

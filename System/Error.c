@@ -1,9 +1,4 @@
-#include "Error.h"
-#include "dma.h"
-#include "usart.h"
-
-error_t  Error_Code  = {0};
-giveup_t Giveup_Code = {0};
+#include "Config.h"
 
 void Reset_USART(UART_HandleTypeDef *huart)
 {
