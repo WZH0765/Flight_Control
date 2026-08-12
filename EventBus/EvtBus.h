@@ -28,6 +28,7 @@ typedef enum
     EVT_MAG_ERROR,
     EVT_BAR_ERROR,
     EVT_GPS_ERROR,
+    EVT_SENSORS_ERROR,
 
 //事件 -遥控lost&found
     EVT_RC_LOST,
@@ -62,6 +63,7 @@ typedef struct
 void EvtBus_Init(void);
 bool EvtBus_Publish(evt_publish_t *event);
 bool EvtBus_Subscribe(evt_id_t ID,evt_callback_t Callback);
+void EvtBus_Dispatch(evt_publish_t *event);
 
 void EvtBus_SensorReady_Callback(evt_publish_t *ev);
 void EvtBus_SensorError_Callback(evt_publish_t *ev);

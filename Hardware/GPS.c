@@ -28,15 +28,21 @@ void GPS_Init(void)
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart3,GPS_RxBuffer,sizeof(GPS_RxBuffer));
     __HAL_DMA_DISABLE_IT(&hdma_usart3_rx,DMA_IT_HT);
+
+    //初始化成功，标记硬件就绪并发布就绪事件（与其他传感器模式一致）
+    HW_SetReady(HW_GPS);
+    EvtBus_Publish(&(evt_publish_t){.ID = EVT_GPS_READY});
 }
 
 /*
 *   解析单行NMEA数据
+*   使用局部变量填充完整后再一次性写入队列，避免全局结构体中间状态暴露（数据竞争）
 */
 static void GPS_ParseLine(const char *line)
 {
     struct minmea_sentence_rmc rmc;
     struct minmea_sentence_gga gga;
+    gps_data_t ParseData = {0};
 
 	//检查语句满足NMEA标准
     if(minmea_check(line, true) == false) return;
@@ -47,25 +53,25 @@ static void GPS_ParseLine(const char *line)
         if(minmea_parse_rmc(&rmc,line))
         {
 			/*授时*/
-            GpsData.Hour   = rmc.time.hours;
-            GpsData.Minute = rmc.time.minutes;
-            GpsData.Second = rmc.time.seconds;
+            ParseData.Hour   = rmc.time.hours;
+            ParseData.Minute = rmc.time.minutes;
+            ParseData.Second = rmc.time.seconds;
 
             if(rmc.valid == true)
             {
-                GpsData.Latitude  	  = minmea_tocoord(&rmc.latitude);
-                GpsData.Longitude 	  = minmea_tocoord(&rmc.longitude);
-                GpsData.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514f;   //节 -> m/s
-                GpsData.GroundCourse = minmea_tofloat(&rmc.course);
+                ParseData.Latitude     = minmea_tocoord(&rmc.latitude);
+                ParseData.Longitude    = minmea_tocoord(&rmc.longitude);
+                ParseData.GroundSpeed  = minmea_tofloat(&rmc.speed)*0.514f;   //节 -> m/s
+                ParseData.GroundCourse = minmea_tofloat(&rmc.course);
             }
             else
             {
-                GpsData.Latitude     = 0.0;
-                GpsData.Longitude    = 0.0;
-                GpsData.GroundSpeed  = 0.0f;
-                GpsData.GroundCourse = 0.0f;
+                ParseData.Latitude     = 0.0;
+                ParseData.Longitude    = 0.0;
+                ParseData.GroundSpeed  = 0.0f;
+                ParseData.GroundCourse = 0.0f;
             }
-            GpsData.TimeStamp = xTaskGetTickCount();
+            ParseData.TimeStamp = xTaskGetTickCount();
         }
         break;
 
@@ -74,22 +80,24 @@ static void GPS_ParseLine(const char *line)
         {
             if(gga.fix_quality > 0)
             {
-                GpsData.Fix = (gga.fix_quality >= 2) ? GPS_FIX_3D : GPS_FIX_2D;
-                GpsData.SatNum    = gga.satellites_tracked;
-                GpsData.Altitude  = minmea_tofloat(&gga.altitude);
-                GpsData.Latitude  = minmea_tocoord(&gga.latitude);
-                GpsData.Longitude = minmea_tocoord(&gga.longitude);
+                ParseData.Fix = (gga.fix_quality >= 2) ? GPS_FIX_3D : GPS_FIX_2D;
+                ParseData.SatNum    = gga.satellites_tracked;
+                ParseData.Altitude  = minmea_tofloat(&gga.altitude);
+                ParseData.Latitude  = minmea_tocoord(&gga.latitude);
+                ParseData.Longitude = minmea_tocoord(&gga.longitude);
             }
             else
             {
-                GpsData.Fix = GPS_FIX_INVALID;
-                GpsData.Altitude  = 0.0f;
-                GpsData.Latitude  = 0.0;
-                GpsData.Longitude = 0.0;
+                ParseData.Fix = GPS_FIX_INVALID;
+                ParseData.Altitude  = 0.0f;
+                ParseData.Latitude  = 0.0;
+                ParseData.Longitude = 0.0;
             }
-            GpsData.TimeStamp = xTaskGetTickCount();
-        //直接写入队列
-        xQueueOverwrite(xGPS_DataQ,&GpsData);
+            ParseData.TimeStamp = xTaskGetTickCount();
+
+            //整帧数据填充完成后，一次性写入队列并同步全局结构体，避免中间状态暴露
+            GpsData = ParseData;
+            xQueueOverwrite(xGPS_DataQ,&ParseData);
         }
         break;
 

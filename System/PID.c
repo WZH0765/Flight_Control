@@ -22,6 +22,15 @@ PID_Controller PID_Altitude;
 
 void PID_Init(void)
 {
+    PID_UpdateParams();
+}
+
+/**
+*   运行时更新PID参数：从PARAMS重新读取所有系数并下发
+*   供遥控器/地面站修改参数后实时生效，无需重新上电
+**/
+void PID_UpdateParams(void)
+{
 	PID_Set_Paramaters(&PID_Rate_Roll,
         				PARAMS.Rate_Roll.Kp,
         				PARAMS.Rate_Roll.Ki,

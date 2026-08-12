@@ -64,6 +64,13 @@ rc_raw_t RcRaw = {0};
 
 float HeightCorr = 0;
 
+//电机紧急停机标志（定义，Error.h中extern声明，由控制任务读取）
+volatile uint8_t MotorStopCmd = 0;
+//电调校准标志（校准期间禁止控制任务干预PWM）
+volatile uint8_t EscCalibrating = 0;
+//控制任务过载标志（供Sys_Observe监控复位）
+volatile uint8_t ExecOverrun = 0;
+
 //超时计数器
 static uint16_t Rc_Timeout  = 0;
 static uint16_t Gps_Timeout = 0;
@@ -121,6 +128,13 @@ const osThreadAttr_t Task_Sys_Obs_attributes = {
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for Task_EvtBus_Handler */
+osThreadId_t Task_EvtBus_HandlerHandle;
+const osThreadAttr_t Task_EvtBus_Handler_attributes = {
+  .name = "Task_EvtBus_Handler",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -134,6 +148,7 @@ void Att_Control(void *argument);
 void Rc_Parse(void *argument);
 void Log_Write(void *argument);
 void Sys_Observe(void *argument);
+void EvtBus_Handler(void *argument);
 
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
 
@@ -173,7 +188,7 @@ void MX_FREERTOS_Init(void) {
   xGPS_DataQ = xQueueCreate(1,sizeof(gps_data_t));
   xBAR_DataQ = xQueueCreate(1,sizeof(bar_data_t));
   xLOG_DataQ = xQueueCreate(256,sizeof(log_data_t));
-  xEvent_Q   = xQueueCreate(16,sizeof(evt_publish_t));
+  //xEvent_Q 已在 main.c 传感器初始化前创建（此处不再重复创建）
 
   /* USER CODE END RTOS_QUEUES */
 
@@ -198,6 +213,9 @@ void MX_FREERTOS_Init(void) {
 
   /* creation of Task_Sys_Obs */
   Task_Sys_ObsHandle = osThreadNew(Sys_Observe, NULL, &Task_Sys_Obs_attributes);
+
+  /* creation of Task_EvtBus_Handler */
+  Task_EvtBus_HandlerHandle = osThreadNew(EvtBus_Handler, NULL, &Task_EvtBus_Handler_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -234,6 +252,11 @@ void Imu_Read(void *argument)
 
     //转换为帧
     Cnt = Cnt/16;
+    if(Cnt == 0)
+    {
+      inv_imu_flush_fifo(&IMU);
+      continue;
+    }
     if(Cnt < 3 || Cnt > 10)
     {
       inv_imu_flush_fifo(&IMU);
@@ -308,7 +331,7 @@ void Sen_Read(void *argument)
     if((++ Magcnt) >= MAG_READ_DIV)
     {
       int result = MAG_Parse();
-      if(result == MAG_OK)
+      if(result == RET_OK)
       {
         Mag_Timeout = 0;
         //Mag数据ready 发布至事件总线
@@ -435,6 +458,7 @@ void Att_Control(void *argument)
   mag_data_t MagData = {0};     //MAG缩放数据
 
   TickType_t xCurrentTime;
+  TickType_t xLoopStart;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //上次任务唤醒时刻
 
   for(;;)
@@ -442,10 +466,18 @@ void Att_Control(void *argument)
     //固定1KHz调度
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1));
     xCurrentTime = xTaskGetTickCount();
+    xLoopStart   = xCurrentTime;
 
     if(Get_CurrentState() == STATE_FLYING)      //正常飞行中
     {
-      if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)       //获取IMU数据
+      if(MotorStopCmd == 1)                     //紧急停机指令有效，保持电机停止
+      {
+        __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
+        __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
+      }
+      else if(xQueueReceive(xIMU_DataQ,&ImuRaw,0) == pdTRUE)       //获取IMU数据
       {
         Imu_Timeout = 0;
 
@@ -525,7 +557,7 @@ void Att_Control(void *argument)
         else
         {
           //RC 数据无效
-          MOTOR_STOP();
+          MOTOR_Stop();
 
           PID_Rate_Yaw.ErrorInt   = 0.0f;
           PID_Rate_Roll.ErrorInt  = 0.0f;
@@ -547,10 +579,19 @@ void Att_Control(void *argument)
     }
     else
     {
-      MOTOR_STOP();
+      if(EscCalibrating == 0)    //电调校准期间不干预PWM
+      {
+        MOTOR_Stop();
+      }
     }
     //喂狗
     HAL_IWDG_Refresh(&hiwdg1);
+
+    //1KHz周期监测：单次执行超过1ms则置位过载标志（供Sys_Observe监控）
+    if((xTaskGetTickCount() - xLoopStart) > pdMS_TO_TICKS(1))
+    {
+      ExecOverrun = 1;
+    }
   }
   /* USER CODE END Att_Control */
 }
@@ -617,16 +658,103 @@ void Rc_Parse(void *argument)
 * @retval None
 */
 /* USER CODE END Header_Log_Write */
+void Log_Write(void *argument)
+{
+  /* USER CODE BEGIN Log_Write */
+  (void)argument;
+
+  log_data_t LogData = {0};
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  for(;;)
+  {
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(LOG_WRITE_DT));
+
+    if(xQueueReceive(xLOG_DataQ,&LogData,0) == pdTRUE)
+    {
+      Log_Save(&LogData);
+    }
+    else
+    {
+      //无新数据时同步缓冲区到SD卡
+      Log_Sync();
+    }
+  }
+  /* USER CODE END Log_Write */
+}
+
+/* USER CODE BEGIN Header_Sys_Observe */
+/**
+* @brief  系统健康监测函数
+* @param  argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_Sys_Observe */
 void Sys_Observe(void *argument)
 {
   /* USER CODE BEGIN Sys_Observe */
   (void)argument;
-  
+
+  uint16_t InitTimeout = 0;    //传感器初始化超时计数
+  uint16_t HealthTick  = 0;    //健康状态上报周期计数
+
   for(;;)
-  { 
+  {
+    //传感器初始化超时监控：上电后若长时间未全部就绪，上报错误事件
+    if(Get_CurrentState() == STATE_UNINIT)
+    {
+      if(HW_AllReady() == true)
+      {
+        InitTimeout = 0;
+      }
+      else if((++ InitTimeout) >= SENSORS_INIT_TIMEOUT)
+      {
+        EvtBus_Publish(&(evt_publish_t){.ID = EVT_SENSORS_ERROR});
+        InitTimeout = 0;
+      }
+    }
+
+    //系统健康度监测：控制任务过载告警，复位过载标志
+    if(ExecOverrun == 1)
+    {
+      ExecOverrun = 0;
+      //过载告警，可在此接入LED/蜂鸣器提示
+    }
+
+    if((++ HealthTick) >= SYS_OBS_DT)
+    {
+      HealthTick = 0;
+      //周期性健康检查：可在此扩展电池电压/堆栈水位等监测项
+    }
+
     osDelay(10);
   }
   /* USER CODE END Sys_Observe */
+}
+
+/* USER CODE BEGIN Header_EvtBus_Handler */
+/**
+* @brief  事件总线分发任务
+* @param  argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_EvtBus_Handler */
+void EvtBus_Handler(void *argument)
+{
+  /* USER CODE BEGIN EvtBus_Handler */
+  (void)argument;
+
+  evt_publish_t Event;
+
+  for(;;)
+  {
+    //阻塞等待事件，取出后按事件ID分发至订阅回调
+    if(xQueueReceive(xEvent_Q,&Event,portMAX_DELAY) == pdTRUE)
+    {
+      EvtBus_Dispatch(&Event);
+    }
+  }
+  /* USER CODE END EvtBus_Handler */
 }
 
 /* Private application code --------------------------------------------------*/

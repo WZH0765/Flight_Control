@@ -12,6 +12,7 @@ typedef struct
 } calib_data_t;
 
 bool Calibrate_All(void);
+bool Calibrate_ESC(void);
 extern calib_data_t Result;
 extern LPS22HH_Object_t BAR;
 

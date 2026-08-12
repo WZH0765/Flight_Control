@@ -18,6 +18,7 @@ typedef struct
 }PID_Controller;
 
 void PID_Init(void);
+void PID_UpdateParams(void);
 float PID_Calculate(PID_Controller *PID,uint8_t dt);
 void PID_Set_Paramaters(PID_Controller *PID,float Kp,float Ki,float Kd,float Int_Limit,float Out_Limit);
 

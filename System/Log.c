@@ -89,12 +89,14 @@ uint8_t Log_Open(void)
     FRESULT res;
     UINT bw;
     uint16_t Index = 0;
+    uint16_t retry = 0;    //创建文件的重试计数器
 
     if(!Log_Status.Ready) return 0;
 
     do
     {
-        if(Index > 9999) return 0;
+        //文件系统异常时避免无限循环
+        if(Index > 9999 || (++ retry) > 10000) return 0;
         snprintf(Log_FileName,sizeof(Log_FileName),"LOG_%04u.CSV",Index ++);
         res = f_open(&Log_File,Log_FileName,FA_CREATE_NEW | FA_WRITE);
 

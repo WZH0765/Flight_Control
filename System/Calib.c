@@ -119,3 +119,36 @@ bool Calibrate_All(void)
         return false;
     }
 }
+
+/**
+*   电调校准：先输出高脉宽(2000us)持续数秒进入校准模式，
+*   再降至低脉宽(900us)确认解锁，以适配主流电调的高/低脉宽阈值
+*   仅在首次进入 STATE_DISARMED 时执行一次
+**/
+bool Calibrate_ESC(void)
+{
+    static bool already_esc_cali = false;
+    if(already_esc_cali == true) return true;
+    already_esc_cali = true;
+
+    //校准期间禁止控制任务干预PWM输出
+    EscCalibrating = 1;
+
+    //1. 输出高脉宽，进入电调校准模式
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MAX);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MAX);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MAX);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MAX);
+    vTaskDelay(pdMS_TO_TICKS(ESC_CALIB_HIGH_TIME));
+
+    //2. 降至低脉宽，电调记录最小脉宽并完成解锁
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
+    __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
+    vTaskDelay(pdMS_TO_TICKS(ESC_CALIB_LOW_TIME));
+
+    //校准完成，恢复控制任务对PWM的管理
+    EscCalibrating = 0;
+    return true;
+}

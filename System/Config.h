@@ -16,7 +16,6 @@
 #include "Filter.h"
 #include "EvtBus.h"
 #include "Params.h"
-#include "EvtBus.h"
 #include "State.h"
 #include "usart.h"
 #include "Error.h"
@@ -81,10 +80,12 @@
 
 #define CLAMP(value,low,high) ((value)<(low)?(low):((value)>(high)?(high):(value)))
 
+//统一返回状态（0=成功，非0=失败）
+#define RET_OK      0
+#define RET_ERROR  -1
+
 //对于I2C轮询模块
-#define MAG_OK      0
 #define MAG_BUSY    1
-#define MAG_ERROR  -1
 
 //任务周期 DT
 #define SEN_READ_DT 10
@@ -109,12 +110,14 @@
 #define MAG_TIMEOUT_THRESHOLD 20 
 #define BAR_TIMEOUT_THRESHOLD 50
 
-#define MOTOR_STOP() do\
-{\
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN); \
-  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN); \
-} while(0)
+//传感器初始化超时阈值（Sys_Observe周期10ms，500即约5s）
+#define SENSORS_INIT_TIMEOUT  500
+
+//系统健康监测周期（Sys_Observe周期10ms，100即约1s）
+#define SYS_OBS_DT            100
+
+//电调校准时间(ms)：先高脉宽持续数秒，再降低脉宽
+#define ESC_CALIB_HIGH_TIME   2000
+#define ESC_CALIB_LOW_TIME    1000
 
 #endif

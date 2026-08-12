@@ -37,6 +37,7 @@
 /* USER CODE BEGIN Includes */
 
 #include "Config.h"
+#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -129,9 +130,13 @@ int main(void)
   Params_Init();    //初始化所有参数
   StateMachine_Init();
 
+  //事件队列需在传感器初始化前创建，否则初始化期间发布的事件无法入队
+  xEvent_Q = xQueueCreate(16,sizeof(evt_publish_t));
+
   RC_Init();
   IMU_Init();
   MAG_Init();
+  BAR_Init();
   GPS_Init();
   PID_Init();
   Log_Init();
@@ -325,8 +330,26 @@ void Error_Handler(void)
 void assert_failed(uint8_t *file, uint32_t line)
 {
   /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
+  char msg[128];
+  int n = snprintf(msg,sizeof(msg),"Assert failed: %s line %lu\r\n",file,(unsigned long)line);
+
+  /* 通过USART1调试串口输出断言信息 */
+  if(n > 0 && n < (int)sizeof(msg))
+  {
+    HAL_UART_Transmit(&huart1,(uint8_t*)msg,(uint16_t)n,HAL_MAX_DELAY);
+  }
+
+  /* 断言失败属于致命错误：强制电机停止并死循环等待复位 */
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_1,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_2,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_3,PWM_MIN);
+  __HAL_TIM_SET_COMPARE(&htim1,TIM_CHANNEL_4,PWM_MIN);
+
+  __disable_irq();
+  while (1)
+  {
+    /* 死循环，等待看门狗或人工复位 */
+  }
   /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
