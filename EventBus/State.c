@@ -18,8 +18,7 @@ void EnterState(state_t NewState)
 
     case STATE_DISARMED:
         MOTOR_Stop();
-        //进入待解锁前进行电调校准（仅首次）
-        Calibrate_ESC();
+
         MotorStopCmd = 0;    //校准完成后清除停机标志，允许后续解锁
         break;
 

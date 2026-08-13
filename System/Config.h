@@ -62,9 +62,9 @@
 /**CONTROL_TASK define END**/
 
 /*LOCK_TASK define BEGIN*/
-#define LOCK_HOLDTIME        1000
-#define LOCK_X_THRESHOLD     80.0f
-#define LOCK_THRO_THRESHOLD  0.05f
+#define LOCK_HOLDTIME     1000
+#define LOCK_X_THRESHOLD  80.0f
+#define LOCK_Y_THRESHOLD  0.05f
 /*LOCK_TASK define END*/
 
 #define LOG_BUF_SIZE      128
@@ -82,10 +82,8 @@
 
 //统一返回状态（0=成功，非0=失败）
 #define RET_OK      0
+#define RET_BUSY    1
 #define RET_ERROR  -1
-
-//对于I2C轮询模块
-#define MAG_BUSY    1
 
 //任务周期 DT
 #define SEN_READ_DT 10
@@ -98,7 +96,7 @@
 #define MAG_READ_DIV 5
 #define BAR_READ_DIV 2
 
-#define POS_ESTI_DT 20
+#define POS_EST_DT  20
 #define ATT_CTRL_DT 1
 #define RC_PARSE_DT 500
 #define LOG_WRITE_DT 100
@@ -109,15 +107,9 @@
 #define GPS_TIMEOUT_THRESHOLD 500
 #define MAG_TIMEOUT_THRESHOLD 20 
 #define BAR_TIMEOUT_THRESHOLD 50
-
-//传感器初始化超时阈值（Sys_Observe周期10ms，500即约5s）
-#define SENSORS_INIT_TIMEOUT  500
+#define SENSORS_TIMEOUT_THRESHOLD  500
 
 //系统健康监测周期（Sys_Observe周期10ms，100即约1s）
 #define SYS_OBS_DT            100
-
-//电调校准时间(ms)：先高脉宽持续数秒，再降低脉宽
-#define ESC_CALIB_HIGH_TIME   2000
-#define ESC_CALIB_LOW_TIME    1000
 
 #endif

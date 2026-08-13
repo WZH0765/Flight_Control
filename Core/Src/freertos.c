@@ -62,12 +62,10 @@ QueueHandle_t     xEvent_Q;
 
 rc_raw_t RcRaw = {0};
 
-float HeightCorr = 0;
+float ThrottleOffset = 0;
 
 //电机紧急停机标志（定义，Error.h中extern声明，由控制任务读取）
 volatile uint8_t MotorStopCmd = 0;
-//电调校准标志（校准期间禁止控制任务干预PWM）
-volatile uint8_t EscCalibrating = 0;
 //控制任务过载标志（供Sys_Observe监控复位）
 volatile uint8_t ExecOverrun = 0;
 
@@ -77,6 +75,7 @@ static uint16_t Gps_Timeout = 0;
 static uint16_t Imu_Timeout = 0;
 static uint16_t Mag_Timeout = 0;
 static uint16_t Bar_Timeout = 0;
+static uint16_t Sensors_Timeout = 0;
 
 /* USER CODE END Variables */
 /* Definitions for Task_Imu_Rd */
@@ -337,7 +336,7 @@ void Sen_Read(void *argument)
         //Mag数据ready 发布至事件总线
         EvtBus_Publish(&(evt_publish_t){.ID = EVT_MAG_DATA_READY});
       }
-      else if(result == MAG_BUSY)
+      else if(result == RET_BUSY)
       {
         if((++ Mag_Timeout) >= MAG_TIMEOUT_THRESHOLD)
         {
@@ -399,10 +398,10 @@ void Pos_Estimate(void *argument)
 
   for(;;)
   {
-    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(POS_ESTI_DT));
+    vTaskDelayUntil(&xLastWakeTime,pdMS_TO_TICKS(POS_EST_DT));
     if(xQueuePeek(xBAR_DataQ,&BarData,0) != pdTRUE) continue;
 
-    CurrentAlt = BarData.Height - Result.HomeAlt;
+    CurrentAlt = BarData.Alt - Result.HomeAlt;
 
     CurrentState = Get_CurrentState();
     if(CurrentState == STATE_FLYING)
@@ -424,17 +423,17 @@ void Pos_Estimate(void *argument)
 
       PID_Altitude.Target = TargetAlt;
       PID_Altitude.Actual = CurrentAlt;
-      float TargetSpeed = PID_Calculate(&PID_Altitude,POS_ESTI_DT);
+      float TargetSpeed = PID_Calculate(&PID_Altitude,POS_EST_DT);
 
       PID_Velocity.Target = TargetSpeed;
       PID_Velocity.Actual = 0.0f;
-      HeightCorr = PID_Calculate(&PID_Velocity,POS_ESTI_DT);
+      ThrottleOffset = PID_Calculate(&PID_Velocity,POS_EST_DT);
 
-      HeightCorr = CLAMP(HeightCorr,-PARAMS.Velocity.OutLimit,PARAMS.Velocity.OutLimit);
+      ThrottleOffset = CLAMP(ThrottleOffset,-PARAMS.Velocity.OutLimit,PARAMS.Velocity.OutLimit);
     }
     else
     {
-      HeightCorr = 0.0f;
+      ThrottleOffset = 0.0f;
     }
   }
   /* USER CODE END Pos_Estimate */
@@ -458,7 +457,6 @@ void Att_Control(void *argument)
   mag_data_t MagData = {0};     //MAG缩放数据
 
   TickType_t xCurrentTime;
-  TickType_t xLoopStart;
   TickType_t xLastWakeTime = xTaskGetTickCount();     //上次任务唤醒时刻
 
   for(;;)
@@ -466,7 +464,6 @@ void Att_Control(void *argument)
     //固定1KHz调度
     vTaskDelayUntil(&xLastWakeTime, pdMS_TO_TICKS(1));
     xCurrentTime = xTaskGetTickCount();
-    xLoopStart   = xCurrentTime;
 
     if(Get_CurrentState() == STATE_FLYING)      //正常飞行中
     {
@@ -533,7 +530,7 @@ void Att_Control(void *argument)
           float Out_Pitch        = PID_Calculate(&PID_Rate_Pitch, ATT_CTRL_DT);
 
           //应用高度修正，得到最终油门
-          float Throttle = CLAMP(RcData.Throttle + HeightCorr,0.0f,1.0f);
+          float Throttle = CLAMP(RcData.Throttle + ThrottleOffset,0.0f,1.0f);
           float BasePwm  = PWM_MIN + Throttle * PWM_RANGE;
           float BaseCorr = 0.5f * Throttle * PWM_RANGE;
 
@@ -579,16 +576,13 @@ void Att_Control(void *argument)
     }
     else
     {
-      if(EscCalibrating == 0)    //电调校准期间不干预PWM
-      {
-        MOTOR_Stop();
-      }
+      MOTOR_Stop();
     }
     //喂狗
     HAL_IWDG_Refresh(&hiwdg1);
 
     //1KHz周期监测：单次执行超过1ms则置位过载标志（供Sys_Observe监控）
-    if((xTaskGetTickCount() - xLoopStart) > pdMS_TO_TICKS(1))
+    if((xTaskGetTickCount() - xCurrentTime) > pdMS_TO_TICKS(1))
     {
       ExecOverrun = 1;
     }
@@ -626,12 +620,12 @@ void Rc_Parse(void *argument)
       RcData.Pitch_Target = RcRaw.Right_Y*PARAMS.Attitude_Control.Pitch_Scale*RAD;
 
       //外八
-      if(RcRaw.Left_X > LOCK_X_THRESHOLD && RcRaw.Right_X < -LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_THRO_THRESHOLD)
+      if(RcRaw.Left_X > LOCK_X_THRESHOLD && RcRaw.Right_X < -LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_Y_THRESHOLD)
       {
         EvtBus_Publish(&(evt_publish_t){.ID = EVT_ARM_GESTURE});
       }
       //内八
-      if(RcRaw.Left_X < -LOCK_X_THRESHOLD && RcRaw.Right_X > LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_THRO_THRESHOLD)
+      if(RcRaw.Left_X < -LOCK_X_THRESHOLD && RcRaw.Right_X > LOCK_X_THRESHOLD && RcRaw.Left_Y/100.0f < LOCK_Y_THRESHOLD)
       {
         EvtBus_Publish(&(evt_publish_t){.ID = EVT_DISARM_GESTURE});
       }
@@ -695,22 +689,21 @@ void Sys_Observe(void *argument)
   /* USER CODE BEGIN Sys_Observe */
   (void)argument;
 
-  uint16_t InitTimeout = 0;    //传感器初始化超时计数
   uint16_t HealthTick  = 0;    //健康状态上报周期计数
 
   for(;;)
   {
-    //传感器初始化超时监控：上电后若长时间未全部就绪，上报错误事件
+    //传感器初始化超时监控
     if(Get_CurrentState() == STATE_UNINIT)
     {
       if(HW_AllReady() == true)
       {
-        InitTimeout = 0;
+        Sensors_Timeout = 0;
       }
-      else if((++ InitTimeout) >= SENSORS_INIT_TIMEOUT)
+      else if((++ Sensors_Timeout) >= SENSORS_TIMEOUT_THRESHOLD)
       {
         EvtBus_Publish(&(evt_publish_t){.ID = EVT_SENSORS_ERROR});
-        InitTimeout = 0;
+        Sensors_Timeout = 0;
       }
     }
 

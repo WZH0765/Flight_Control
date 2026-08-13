@@ -96,7 +96,7 @@ int BAR_Read(void)
         BarRaw.Temp  = temperature;
 
         BarData.TimeStamp = xTaskGetTickCount();
-        BarData.Height    = (1.0f - powf(pressure/1013.25f,0.190263f))*44330.8f;
+        BarData.Alt = (1.0f - powf(pressure/1013.25f,0.190263f))*44330.8f;
 
         xQueueOverwrite(xBAR_DataQ,&BarData);
         return LPS22HH_OK;

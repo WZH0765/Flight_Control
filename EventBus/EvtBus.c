@@ -115,8 +115,8 @@ void EvtBus_SensorReady_Callback(evt_publish_t *event)
 }
 
 /**
-*   传感器错误回调函数（分级处理）
-*   IMU故障        → 标记未就绪，交由状态机进入紧急状态
+*   传感器错误回调函数
+*   IMU故障         → 标记未就绪，交由状态机进入紧急状态
 *   MAG/BAR/GPS故障 → 标记未就绪并尝试重新初始化，连续失败触发更高层级故障
 **/
 void EvtBus_SensorError_Callback(evt_publish_t *event)
@@ -124,7 +124,6 @@ void EvtBus_SensorError_Callback(evt_publish_t *event)
     switch(event->ID)
     {
     case EVT_IMU_ERROR:
-        //IMU为飞行安全关键传感器，标记未就绪，由状态机进入紧急状态
         HW_SetUnready(HW_IMU);
         break;
 

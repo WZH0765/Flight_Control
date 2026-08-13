@@ -71,7 +71,7 @@ int MAG_Parse(void)
 	}
 	if((status&0x01) == 0)
 	{
-		return MAG_BUSY;
+		return RET_BUSY;
 	}
 	if(MAG_ReadReg(MAG_DATA_L,data,6) != RET_OK)
 	{

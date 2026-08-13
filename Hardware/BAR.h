@@ -14,7 +14,7 @@ typedef struct
 
 typedef struct
 {
-    float Height;
+    float Alt;
     uint32_t TimeStamp;
 
 } bar_data_t;
